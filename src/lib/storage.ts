@@ -203,9 +203,9 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
     clickedCount: 54,
     repliedCount: 32,
     interestedCount: 18,
-    bounceCount: 2,
-    senderAccounts: ['alexandre.prospecting@company.io', 'sarah.partners@company.io'],
-    dailyLimit: 45,
+    bounceCount: 4,
+    senderAccounts: ['crm@rayons.net'],
+    dailyLimit: 60,
     timezone: 'Europe/Paris',
     scheduleDays: [1, 2, 3, 4, 5],
     scheduleStartTime: '08:30',
@@ -314,8 +314,8 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
 ];
 
 export const INITIAL_WARMUP_CONFIG: WarmupConfig = {
-  mailboxEmail: 'alexandre.prospecting@company.io',
-  provider: 'google',
+  mailboxEmail: 'crm@rayons.net',
+  provider: 'smtp',
   active: true,
   currentScore: 98,
   dailyWarmupSent: 34,
