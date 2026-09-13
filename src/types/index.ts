@@ -10,6 +10,8 @@ export interface User {
   avatar?: string;
   companyName: string;
   createdAt: string;
+  status?: 'active' | 'suspended';
+  lastLogin?: string;
 }
 
 export type StepActionType = 

@@ -15,7 +15,8 @@ import {
   Settings, 
   Layers,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { useAuth } from '@/context/AuthContext';
@@ -81,6 +82,12 @@ export default function Sidebar() {
       href: '/analytics',
       icon: BarChart3,
       badge: null
+    },
+    {
+      name: 'Accès & cPanel',
+      href: '/admin/users',
+      icon: Lock,
+      badge: 'ADMIN'
     }
   ];
 

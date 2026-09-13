@@ -59,34 +59,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, pass: string) => {
     setIsLoading(true);
-    // Simulate brief network verification
-    await new Promise(r => setTimeout(r, 400));
 
     if (!email || !pass) {
       setIsLoading(false);
       return { success: false, error: 'Veuillez saisir votre email et votre mot de passe.' };
     }
 
-    if (pass.length < 4) {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setIsLoading(false);
+        return { 
+          success: false, 
+          error: data.error || 'Accès refusé. Vos identifiants ne sont pas autorisés.' 
+        };
+      }
+
+      setUser(data.user);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
       setIsLoading(false);
-      return { success: false, error: 'Le mot de passe doit comporter au moins 4 caractères.' };
+      router.push('/');
+      return { success: true };
+    } catch (err) {
+      console.error('Login error:', err);
+      setIsLoading(false);
+      return { 
+        success: false, 
+        error: 'Erreur de connexion au serveur d\'authentification central rayons.net.' 
+      };
     }
-
-    // Match or create valid session
-    const matchedUser: User = {
-      id: `user-${Date.now()}`,
-      name: email.split('@')[0].replace('.', ' ').toUpperCase(),
-      email: email.toLowerCase(),
-      role: email.includes('admin') ? 'admin' : 'sales',
-      companyName: 'Entreprise Partenaire',
-      createdAt: new Date().toISOString()
-    };
-
-    setUser(matchedUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(matchedUser));
-    setIsLoading(false);
-    router.push('/');
-    return { success: true };
   };
 
   const register = async (name: string, email: string, pass: string, company: string) => {
