@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if request is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the user is Daniel Kiboko (Super Admin)
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'danielkiboko218@gmail.com' ||
+        request.auth.token.email == 'crm@rayons.net' || 
+        request.auth.token.email == 'daniel.kiboko@rayons.net'
+      );
+    }
+
+    // Helper function to check ownership of the user profile/data
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users Collection (Root)
+    match /users/{userId} {
+      // Super Admin can read and write all users
+      // A user can read and update their own document
+      allow read: if isSuperAdmin() || isOwner(userId);
+      allow create: if isAuthenticated();
+      allow update: if isSuperAdmin() || isOwner(userId);
+      allow delete: if isSuperAdmin();
+
+      // Multi-tenant Subcollections (Leads, Campaigns, Messages, Deals, Email Accounts)
+      match /leads/{leadId} {
+        allow read, write: if isSuperAdmin() || isOwner(userId);
+      }
+
+      match /campaigns/{campaignId} {
+        allow read, write: if isSuperAdmin() || isOwner(userId);
+      }
+
+      match /messages/{messageId} {
+        allow read, write: if isSuperAdmin() || isOwner(userId);
+      }
+
+      match /deals/{dealId} {
+        allow read, write: if isSuperAdmin() || isOwner(userId);
+      }
+
+      match /emailAccounts/{accountId} {
+        allow read, write: if isSuperAdmin() || isOwner(userId);
+      }
+    }
+  }
+}

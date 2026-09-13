@@ -187,7 +187,7 @@ export default function NewCampaignPage() {
         status: campaignStatus,
         steps,
         leadsCount: leads.length,
-        senderAccounts: ['crm@rayons.net'],
+        senderAccounts: ['danielkiboko218@gmail.com'],
         dailyLimit,
         timezone,
         scheduleDays: [1, 2, 3, 4, 5],

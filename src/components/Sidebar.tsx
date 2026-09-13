@@ -16,7 +16,8 @@ import {
   Layers,
   LogOut,
   ShieldCheck,
-  Lock
+  Lock,
+  Mail
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { useAuth } from '@/context/AuthContext';
@@ -48,7 +49,13 @@ export default function Sidebar() {
       badge: 'PRO'
     },
     {
-      name: 'Base Leads & CSV',
+      name: 'Comptes E-mail Pro',
+      href: '/settings/email',
+      icon: Mail,
+      badge: 'SMTP'
+    },
+    {
+      name: 'Base Leads & Excel',
       href: '/leads',
       icon: Users,
       badge: null
@@ -84,7 +91,7 @@ export default function Sidebar() {
       badge: null
     },
     {
-      name: 'Accès & cPanel',
+      name: 'C-Panel SaaS & Accès',
       href: '/admin/users',
       icon: Lock,
       badge: 'ADMIN'
@@ -124,7 +131,9 @@ export default function Sidebar() {
         <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '0 8px 8px' }}>
           Navigation
         </div>
-        {navItems.map((item) => {
+        {navItems
+          .filter(item => item.href !== '/admin/users' || (user?.role === 'superadmin' || user?.email === 'danielkiboko218@gmail.com' || user?.email === 'crm@rayons.net'))
+          .map((item) => {
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
           const Icon = item.icon;
 

@@ -8,13 +8,21 @@ import {
   Linkedin, 
   Mail, 
   CheckCircle2, 
-  Play
+  Play,
+  Clock,
+  Sparkles,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Header() {
-  const { campaigns, simulateCampaignSend } = useCrm();
+  const { campaigns, simulateCampaignSend, emailAccounts } = useCrm();
+  const { user, trialStatus, upgradeToPro } = useAuth();
   const [simulationToast, setSimulationToast] = useState<string | null>(null);
+
+  const defaultAccount = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
 
   const handleSimulateOutreach = () => {
     if (campaigns.length > 0) {
@@ -27,18 +35,18 @@ export default function Header() {
   return (
     <header className="top-navbar">
       {/* Search Bar Starlink */}
-      <div style={{ position: 'relative', width: '360px' }}>
+      <div style={{ position: 'relative', width: '320px' }}>
         <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
         <input 
           type="text" 
-          placeholder="Rechercher un prospect, entreprise, campagne..." 
+          placeholder="Rechercher un prospect, entreprise..." 
           className="input"
           style={{ paddingLeft: '36px', height: '36px', fontSize: '0.82rem' }}
         />
       </div>
 
       {/* Real-time Status Badges & Quick Action - Monochromatic */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {/* Toast Alert */}
         {simulationToast && (
           <div style={{
@@ -57,32 +65,64 @@ export default function Header() {
           </div>
         )}
 
-        {/* LinkedIn Connection Status */}
-        <div className="badge badge-linkedin">
-          <Linkedin size={13} />
-          LinkedIn Connecté
-        </div>
-
-        {/* Email Accounts Rotation */}
-        <div className="badge badge-email">
-          <Mail size={13} />
-          2 Boîtes en Rotation
-        </div>
-
-        {/* Simulate Outreach Button */}
-        <button 
-          onClick={handleSimulateOutreach}
-          className="btn btn-secondary btn-sm"
-          title="Simuler des interactions et envois en temps réel"
+        {/* Connected Email Pro Indicator */}
+        <Link 
+          href="/settings/email" 
+          className="badge" 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            textDecoration: 'none', 
+            color: '#ffffff',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid var(--border-subtle)'
+          }}
+          title="Gérer les comptes d'envoi SMTP"
         >
-          <Play size={12} fill="#ffffff" />
-          Simuler Envoi
-        </button>
+          <Mail size={13} />
+          {defaultAccount ? defaultAccount.email : 'Connecter Email Pro'}
+        </Link>
+
+        {/* SaaS Plan / Trial Status Badge */}
+        {trialStatus.isSuperAdmin ? (
+          <span className="badge badge-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldCheck size={13} />
+            SUPER-ADMIN MASTER
+          </span>
+        ) : trialStatus.isProActive ? (
+          <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Sparkles size={13} />
+            ABONNÉ PRO (30 $/MO)
+          </span>
+        ) : trialStatus.isTrialActive ? (
+          <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Clock size={13} />
+            ESSAI : {trialStatus.daysRemaining}J RESTANTS
+          </span>
+        ) : (
+          <span className="badge badge-danger" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            ESSAI EXPIRÉ
+          </span>
+        )}
+
+        {/* Pro Upgrade Quick Button for Trial Users */}
+        {!trialStatus.isSuperAdmin && !trialStatus.isProActive && (
+          <button 
+            onClick={upgradeToPro}
+            className="btn btn-primary btn-sm"
+            style={{ fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            title="Activer l'abonnement à 30 $/mois"
+          >
+            <Zap size={13} />
+            Passer à 30 $/m
+          </button>
+        )}
 
         {/* Create Campaign Action */}
-        <Link href="/campaigns/new" className="btn btn-primary btn-sm">
+        <Link href="/campaigns/new" className="btn btn-secondary btn-sm">
           <Plus size={14} />
-          Nouvelle Campagne
+          Campagne
         </Link>
       </div>
     </header>

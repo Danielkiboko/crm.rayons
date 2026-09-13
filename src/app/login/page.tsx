@@ -13,46 +13,37 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  KeyRound,
-  Server
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const { login, register } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'request'>('login');
-  const [email, setEmail] = useState('crm@rayons.net');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [company, setCompany] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    setInfoMessage(null);
     setIsSubmitting(true);
 
     if (mode === 'login') {
       const res = await login(email, password);
       if (!res.success) {
-        setErrorMessage(res.error || 'Identifiants invalides ou compte non autorisé.');
+        setErrorMessage(res.error || 'Identifiants invalides.');
       }
     } else {
-      // Inscription par code d'invitation sécurisé
-      if (inviteCode !== 'RAYONS-2026' && inviteCode !== 'RayonsAdmin2026!') {
-        setErrorMessage('Code d\'invitation SaaS invalide. Seul l\'administrateur de rayons.net peut délivrer ce code.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const res = await register(name, email, password, 'Rayons.net SaaS');
+      const res = await register(name, email, password, company || 'Entreprise Client');
       if (!res.success) {
-        setErrorMessage(res.error || 'Erreur lors de la création de l\'accès.');
+        setErrorMessage(res.error || 'Erreur lors de la création du compte.');
       }
     }
     setIsSubmitting(false);
@@ -69,7 +60,7 @@ export default function LoginPage() {
     }}>
       <div style={{
         width: '100%',
-        maxWidth: '440px',
+        maxWidth: '460px',
         background: '#080808',
         border: '1px solid var(--border-strong)',
         borderRadius: 'var(--radius-lg)',
@@ -80,8 +71,8 @@ export default function LoginPage() {
         {/* Brand Header Starlink */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <div style={{
-            width: '44px',
-            height: '44px',
+            width: '46px',
+            height: '46px',
             borderRadius: '4px',
             background: '#000000',
             border: '1px solid #ffffff',
@@ -91,39 +82,21 @@ export default function LoginPage() {
             margin: '0 auto 16px',
             color: '#ffffff'
           }}>
-            <Layers size={22} />
+            <Layers size={24} />
           </div>
 
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em', color: '#ffffff', marginBottom: '4px' }}>
+          <h1 style={{ fontSize: '1.45rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em', color: '#ffffff', marginBottom: '4px' }}>
             LEMFLOW CRM
           </h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Portail Authentifié • Rayons.net
+            Plateforme Outreach & Cold Email SaaS
           </p>
         </div>
 
-        {/* Security / Central cPanel Banner */}
-        <div style={{
-          padding: '10px 14px',
-          background: '#000000',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '4px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          <Server size={16} color="#ffffff" style={{ flexShrink: 0 }} />
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-            Accès privé SaaS géré de manière centralisée par la passerelle <strong style={{ color: '#ffffff' }}>rayons.net</strong>.
-          </div>
-        </div>
-
-        {/* Tab switcher: Connexion vs Code d'Invitation */}
+        {/* Mode Switcher */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '1.2fr 1fr',
-          gap: '4px',
+          gridTemplateColumns: '1fr 1fr',
           background: '#000000',
           padding: '4px',
           borderRadius: 'var(--radius-sm)',
@@ -140,10 +113,10 @@ export default function LoginPage() {
               background: mode === 'login' ? '#ffffff' : 'transparent',
               color: mode === 'login' ? '#000000' : 'var(--text-muted)',
               fontWeight: 700,
-              fontSize: '0.72rem',
+              fontSize: '0.75rem',
               cursor: 'pointer',
               textTransform: 'uppercase',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.05em',
               transition: 'var(--transition)'
             }}
           >
@@ -151,33 +124,52 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('request'); setErrorMessage(null); }}
+            onClick={() => { setMode('register'); setErrorMessage(null); }}
             style={{
               padding: '8px',
               borderRadius: '2px',
               border: 'none',
-              background: mode === 'request' ? '#ffffff' : 'transparent',
-              color: mode === 'request' ? '#000000' : 'var(--text-muted)',
+              background: mode === 'register' ? '#ffffff' : 'transparent',
+              color: mode === 'register' ? '#000000' : 'var(--text-muted)',
               fontWeight: 700,
-              fontSize: '0.72rem',
+              fontSize: '0.75rem',
               cursor: 'pointer',
               textTransform: 'uppercase',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.05em',
               transition: 'var(--transition)'
             }}
           >
-            Activer un Code
+            Essai 7 Jours
           </button>
         </div>
+
+        {/* Trial info banner in register mode */}
+        {mode === 'register' && (
+          <div style={{
+            padding: '10px 14px',
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.78rem',
+            color: '#ffffff',
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <Clock size={16} />
+            <span><strong>7 jours d'essai gratuit</strong> sans carte bancaire. Puis 30 $/mois.</span>
+          </div>
+        )}
 
         {/* Error message alert */}
         {errorMessage && (
           <div style={{
             padding: '10px 14px',
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid #ffffff',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid #ef4444',
             borderRadius: 'var(--radius-sm)',
-            color: '#ffffff',
+            color: '#f87171',
             fontSize: '0.78rem',
             marginBottom: '18px',
             display: 'flex',
@@ -191,17 +183,17 @@ export default function LoginPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {mode === 'request' && (
+          {mode === 'register' && (
             <>
               <div>
-                <label className="label">Nom Complet</label>
+                <label className="label">Nom et Prénom *</label>
                 <div style={{ position: 'relative' }}>
                   <User size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
                   <input 
                     type="text" 
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="ex: Sarah Laurent"
+                    placeholder="ex: Alex Dupont"
                     className="input"
                     style={{ paddingLeft: '36px' }}
                     required
@@ -210,17 +202,16 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="label">Code d'Invitation SaaS Fourni</label>
+                <label className="label">Nom de votre Entreprise</label>
                 <div style={{ position: 'relative' }}>
-                  <KeyRound size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
+                  <Building2 size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
                   <input 
                     type="text" 
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    placeholder="RAYONS-XXXX"
+                    value={company}
+                    onChange={(e) => setCompany(e.target.value)}
+                    placeholder="ex: Acme Corp"
                     className="input"
-                    style={{ paddingLeft: '36px', fontFamily: 'monospace' }}
-                    required
+                    style={{ paddingLeft: '36px' }}
                   />
                 </div>
               </div>
@@ -228,14 +219,14 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label className="label">Email Professionnel Autorisé</label>
+            <label className="label">Email Professionnel *</label>
             <div style={{ position: 'relative' }}>
               <Mail size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="nom@rayons.net"
+                placeholder="nom@entreprise.com"
                 className="input"
                 style={{ paddingLeft: '36px' }}
                 required
@@ -244,7 +235,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="label">Mot de Passe</label>
+            <label className="label">Mot de Passe *</label>
             <div style={{ position: 'relative' }}>
               <Lock size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
               <input 
@@ -270,30 +261,22 @@ export default function LoginPage() {
             type="submit" 
             disabled={isSubmitting}
             className="btn btn-primary"
-            style={{ width: '100%', height: '42px', marginTop: '4px' }}
+            style={{ width: '100%', height: '44px', marginTop: '4px' }}
           >
-            {isSubmitting ? 'Contrôle des accès...' : mode === 'login' ? 'Connexion Sécurisée' : 'Valider mon Accès'}
-            <ArrowRight size={15} />
+            {isSubmitting ? (
+              'Traitement en cours...'
+            ) : mode === 'login' ? (
+              <>Connexion <ArrowRight size={15} /></>
+            ) : (
+              <>Démarrer mon Essai Gratuit (7j) <ArrowRight size={15} /></>
+            )}
           </button>
         </form>
 
-        {/* Security Info Footer */}
-        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            Vous n'avez pas d'accès ? Contactez l'administrateur :
-          </div>
-          <a 
-            href="mailto:crm@rayons.net"
-            style={{ color: '#ffffff', fontWeight: 600, fontSize: '0.75rem', textDecoration: 'none', fontFamily: 'monospace' }}
-          >
-            crm@rayons.net
-          </a>
-        </div>
-
         {/* Security badge footer */}
-        <div style={{ marginTop: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           <ShieldCheck size={13} />
-          Contrôle d'accès chiffré TLS 1.3
+          Accès SaaS Sécurisé & Données Cloisonnées
         </div>
       </div>
     </div>

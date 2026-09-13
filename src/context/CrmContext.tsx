@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, CampaignStep } from '@/types';
+import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, CampaignStep, EmailAccount } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 import { 
   INITIAL_CAMPAIGNS, 
   INITIAL_LEADS, 
@@ -9,10 +10,17 @@ import {
   INITIAL_DEALS, 
   INITIAL_WARMUP_CONFIG, 
   INITIAL_IMAGE_TEMPLATES,
+  INITIAL_EMAIL_ACCOUNTS,
   getStoredData,
   setStoredData
 } from '@/lib/storage';
 import { verifyEmailAddress } from '@/lib/emailVerifier';
+import { 
+  syncLeadsToFirestore, 
+  fetchLeadsFromFirestore, 
+  syncCampaignsToFirestore, 
+  fetchCampaignsFromFirestore 
+} from '@/lib/firestoreService';
 
 interface CrmContextType {
   campaigns: Campaign[];
@@ -21,7 +29,20 @@ interface CrmContextType {
   deals: Deal[];
   warmupConfig: WarmupConfig;
   imageTemplates: ImageTemplate[];
+  emailAccounts: EmailAccount[];
   
+  // Email Accounts
+  addEmailAccount: (account: Omit<EmailAccount, 'id' | 'createdAt'>) => EmailAccount;
+  updateEmailAccount: (id: string, updates: Partial<EmailAccount>) => void;
+  deleteEmailAccount: (id: string) => void;
+  setDefaultEmailAccount: (id: string) => void;
+  testEmailAccount: (id: string) => Promise<{ success: boolean; message: string }>;
+
+  // Live Outreach & Sending
+  sendCampaignEmailLive: (campaignId: string, leadId: string, customSubject?: string, customBody?: string) => Promise<{ success: boolean; error?: string }>;
+  sendBulkCampaignLive: (campaignId: string, onProgress?: (sent: number, total: number) => void) => Promise<{ sent: number; failed: number }>;
+  syncInboxReplies: () => Promise<{ success: boolean; newCount: number }>;
+
   // Campaign actions
   createCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt' | 'sentCount' | 'openedCount' | 'clickedCount' | 'repliedCount' | 'interestedCount' | 'bounceCount'>) => Campaign;
   updateCampaign: (id: string, updates: Partial<Campaign>) => void;
@@ -59,54 +80,98 @@ interface CrmContextType {
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
 
 export function CrmProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [messages, setMessages] = useState<UniboxMessage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [warmupConfig, setWarmupConfig] = useState<WarmupConfig>(INITIAL_WARMUP_CONFIG);
   const [imageTemplates] = useState<ImageTemplate[]>(INITIAL_IMAGE_TEMPLATES);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load from localStorage on mount
+  // Scoped storage key per user tenant to prevent data collisions & amalgamations
+  const getTenantKey = (type: string, userId?: string) => {
+    const uid = userId || user?.id || 'guest';
+    return `rayons_crm_tenant_${uid}_${type}`;
+  };
+
+  // Load tenant-isolated data when user changes
   useEffect(() => {
-    setCampaigns(getStoredData('lemlist_crm_campaigns', INITIAL_CAMPAIGNS));
-    setLeads(getStoredData('lemlist_crm_leads', INITIAL_LEADS));
-    setMessages(getStoredData('lemlist_crm_unibox', INITIAL_UNIBOX_MESSAGES));
-    setDeals(getStoredData('lemlist_crm_deals', INITIAL_DEALS));
-    setWarmupConfig(getStoredData('lemlist_crm_warmup', INITIAL_WARMUP_CONFIG));
+    if (!user) {
+      setCampaigns([]);
+      setLeads([]);
+      setMessages([]);
+      setDeals([]);
+      setEmailAccounts([]);
+      setIsLoaded(false);
+      return;
+    }
+
+    const isSuper = user.role === 'superadmin' || user.email === 'danielkiboko218@gmail.com' || user.email === 'crm@rayons.net';
+    
+    // Super-Admin gets initial demo set if storage empty; Clients start fresh with clean slate
+    setCampaigns(getStoredData(getTenantKey('campaigns', user.id), isSuper ? INITIAL_CAMPAIGNS : []));
+    setLeads(getStoredData(getTenantKey('leads', user.id), isSuper ? INITIAL_LEADS : []));
+    setMessages(getStoredData(getTenantKey('unibox', user.id), isSuper ? INITIAL_UNIBOX_MESSAGES : []));
+    setDeals(getStoredData(getTenantKey('deals', user.id), isSuper ? INITIAL_DEALS : []));
+    setWarmupConfig(getStoredData(getTenantKey('warmup', user.id), INITIAL_WARMUP_CONFIG));
+    setEmailAccounts(getStoredData(getTenantKey('email_accounts', user.id), isSuper ? INITIAL_EMAIL_ACCOUNTS : []));
     setIsLoaded(true);
-  }, []);
 
-  // Save to localStorage on change
-  useEffect(() => {
-    if (isLoaded) {
-      setStoredData('lemlist_crm_campaigns', campaigns);
-    }
-  }, [campaigns, isLoaded]);
+    // Asynchronously fetch latest data from Cloud Firestore
+    const uid = user.id;
+    fetchLeadsFromFirestore(uid).then(cloudLeads => {
+      if (cloudLeads && cloudLeads.length > 0) {
+        setLeads(cloudLeads);
+      }
+    }).catch(() => {});
 
-  useEffect(() => {
-    if (isLoaded) {
-      setStoredData('lemlist_crm_leads', leads);
-    }
-  }, [leads, isLoaded]);
+    fetchCampaignsFromFirestore(uid).then(cloudCampaigns => {
+      if (cloudCampaigns && cloudCampaigns.length > 0) {
+        setCampaigns(cloudCampaigns);
+      }
+    }).catch(() => {});
+  }, [user?.id]);
 
+  // Save to tenant-isolated localStorage & Cloud Firestore on change
   useEffect(() => {
-    if (isLoaded) {
-      setStoredData('lemlist_crm_unibox', messages);
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('campaigns', user.id), campaigns);
+      syncCampaignsToFirestore(user.id, campaigns).catch(() => {});
     }
-  }, [messages, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) {
-      setStoredData('lemlist_crm_deals', deals);
-    }
-  }, [deals, isLoaded]);
+  }, [campaigns, isLoaded, user?.id]);
 
   useEffect(() => {
-    if (isLoaded) {
-      setStoredData('lemlist_crm_warmup', warmupConfig);
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('leads', user.id), leads);
+      syncLeadsToFirestore(user.id, leads).catch(() => {});
     }
-  }, [warmupConfig, isLoaded]);
+  }, [leads, isLoaded, user?.id]);
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('unibox', user.id), messages);
+    }
+  }, [messages, isLoaded, user?.id]);
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('deals', user.id), deals);
+    }
+  }, [deals, isLoaded, user?.id]);
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('warmup', user.id), warmupConfig);
+    }
+  }, [warmupConfig, isLoaded, user?.id]);
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('email_accounts', user.id), emailAccounts);
+    }
+  }, [emailAccounts, isLoaded, user?.id]);
 
   // Campaign methods
   const createCampaign = (campaignData: Omit<Campaign, 'id' | 'createdAt' | 'sentCount' | 'openedCount' | 'clickedCount' | 'repliedCount' | 'interestedCount' | 'bounceCount'>) => {
@@ -393,6 +458,209 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  // Email Accounts Management
+  const addEmailAccount = (accountData: Omit<EmailAccount, 'id' | 'createdAt'>) => {
+    const newAccount: EmailAccount = {
+      ...accountData,
+      id: `acc-${Date.now()}`,
+      createdAt: new Date().toISOString()
+    };
+    setEmailAccounts(prev => {
+      // If first account or set as default, unset previous defaults
+      if (newAccount.isDefault || prev.length === 0) {
+        return [...prev.map(a => ({ ...a, isDefault: false })), { ...newAccount, isDefault: true }];
+      }
+      return [...prev, newAccount];
+    });
+    return newAccount;
+  };
+
+  const updateEmailAccount = (id: string, updates: Partial<EmailAccount>) => {
+    setEmailAccounts(prev => prev.map(acc => {
+      if (acc.id === id) {
+        return { ...acc, ...updates };
+      }
+      if (updates.isDefault && acc.id !== id) {
+        return { ...acc, isDefault: false };
+      }
+      return acc;
+    }));
+  };
+
+  const deleteEmailAccount = (id: string) => {
+    setEmailAccounts(prev => prev.filter(a => a.id !== id));
+  };
+
+  const setDefaultEmailAccount = (id: string) => {
+    setEmailAccounts(prev => prev.map(a => ({ ...a, isDefault: a.id === id })));
+  };
+
+  const testEmailAccount = async (id: string): Promise<{ success: boolean; message: string }> => {
+    const account = emailAccounts.find(a => a.id === id);
+    if (!account) return { success: false, message: 'Compte introuvable' };
+
+    try {
+      const res = await fetch('/api/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtpHost: account.smtpHost,
+          smtpPort: account.smtpPort,
+          smtpSecure: account.smtpSecure,
+          smtpUser: account.smtpUser,
+          smtpPass: account.smtpPass
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        updateEmailAccount(id, {
+          status: 'connected',
+          lastTested: new Date().toISOString(),
+          errorMessage: undefined
+        });
+        return { success: true, message: data.message };
+      } else {
+        updateEmailAccount(id, {
+          status: 'error',
+          lastTested: new Date().toISOString(),
+          errorMessage: data.error
+        });
+        return { success: false, message: data.error };
+      }
+    } catch (err: any) {
+      updateEmailAccount(id, {
+        status: 'error',
+        lastTested: new Date().toISOString(),
+        errorMessage: err.message
+      });
+      return { success: false, message: err.message || 'Erreur réseau' };
+    }
+  };
+
+  // Live Campaign Outreach via Connected SMTP
+  const sendCampaignEmailLive = async (
+    campaignId: string, 
+    leadId: string, 
+    customSubject?: string, 
+    customBody?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    const defaultAcc = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
+
+    if (!lead || !lead.email) {
+      return { success: false, error: 'Prospect ou email manquant' };
+    }
+
+    const firstStep = campaign?.steps.find(s => s.type === 'email_send') || campaign?.steps[0];
+    const subject = customSubject || firstStep?.subject || `Opportunité pour {{company}}`;
+    const body = customBody || firstStep?.body || `Bonjour {{firstName}},\n\nJ'ai découvert {{company}} et souhaite échanger avec vous.`;
+
+    try {
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtpConfig: defaultAcc ? {
+            smtpHost: defaultAcc.smtpHost,
+            smtpPort: defaultAcc.smtpPort,
+            smtpSecure: defaultAcc.smtpSecure,
+            smtpUser: defaultAcc.smtpUser,
+            smtpPass: defaultAcc.smtpPass
+          } : undefined,
+          fromName: defaultAcc?.name || 'Daniel Kiboko',
+          fromEmail: defaultAcc?.email || 'danielkiboko218@gmail.com',
+          toEmail: lead.email,
+          toName: `${lead.firstName} ${lead.lastName}`.trim(),
+          subject,
+          textBody: body,
+          leadVariables: {
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            company: lead.company,
+            jobTitle: lead.jobTitle,
+            customVariables: lead.customVariables
+          }
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Update lead status
+        updateLead(lead.id, {
+          status: 'in_progress',
+          lastActivity: new Date().toISOString()
+        });
+
+        // Update campaign counters
+        if (campaign) {
+          updateCampaign(campaign.id, {
+            sentCount: (campaign.sentCount || 0) + 1,
+            status: 'active'
+          });
+        }
+        return { success: true };
+      } else {
+        return { success: false, error: data.error };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const sendBulkCampaignLive = async (
+    campaignId: string, 
+    onProgress?: (sent: number, total: number) => void
+  ): Promise<{ sent: number; failed: number }> => {
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return { sent: 0, failed: 0 };
+
+    // Find leads assigned to this campaign or all valid leads
+    const targetLeads = leads.filter(l => (l.campaignId === campaignId || !l.campaignId) && l.email);
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < targetLeads.length; i++) {
+      const lead = targetLeads[i];
+      const res = await sendCampaignEmailLive(campaignId, lead.id);
+      if (res.success) {
+        sentCount++;
+      } else {
+        failedCount++;
+      }
+      if (onProgress) {
+        onProgress(i + 1, targetLeads.length);
+      }
+    }
+
+    return { sent: sentCount, failed: failedCount };
+  };
+
+  const syncInboxReplies = async (): Promise<{ success: boolean; newCount: number }> => {
+    const defaultAcc = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
+    try {
+      const res = await fetch('/api/email/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailAccount: defaultAcc })
+      });
+
+      const data = await res.json();
+      if (data.success && data.mockReply) {
+        // Add new reply to messages if not already there
+        const alreadyExists = messages.some(m => m.leadEmail === data.mockReply.leadEmail && m.subject === data.mockReply.subject);
+        if (!alreadyExists) {
+          setMessages(prev => [data.mockReply, ...prev]);
+          return { success: true, newCount: 1 };
+        }
+      }
+      return { success: true, newCount: 0 };
+    } catch (e) {
+      return { success: false, newCount: 0 };
+    }
+  };
+
   return (
     <CrmContext.Provider
       value={{
@@ -402,6 +670,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         deals,
         warmupConfig,
         imageTemplates,
+        emailAccounts,
+        addEmailAccount,
+        updateEmailAccount,
+        deleteEmailAccount,
+        setDefaultEmailAccount,
+        testEmailAccount,
+        sendCampaignEmailLive,
+        sendBulkCampaignLive,
+        syncInboxReplies,
         createCampaign,
         updateCampaign,
         deleteCampaign,

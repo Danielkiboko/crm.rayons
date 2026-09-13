@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   Server, 
@@ -15,375 +15,590 @@ import {
   Code,
   Layers,
   Database,
-  Users
+  Users,
+  Clock,
+  Sparkles,
+  Zap,
+  TrendingUp,
+  DollarSign,
+  Plus,
+  X,
+  Check
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { User, UserRole } from '@/types';
+import { 
+  getSaasUsers, 
+  saveSaasUsers, 
+  addSaasUser, 
+  updateSaasUser, 
+  deleteSaasUser, 
+  checkUserTrialStatus 
+} from '@/lib/userStore';
+import { 
+  fetchAllUsersFromFirestore, 
+  syncUserToFirestore, 
+  deleteUserFromFirestore 
+} from '@/lib/firestoreService';
 
 export default function AdminUsersPage() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user: currentUser } = useAuth();
 
-  // Test cPanel Connection State
-  const [isTestingCpanel, setIsTestingCpanel] = useState(false);
-  const [cpanelStatus, setCpanelStatus] = useState<'idle' | 'success' | 'warning'>('idle');
-  const [cpanelMessage, setCpanelMessage] = useState<string | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [toastNotice, setToastNotice] = useState<string | null>(null);
 
-  // Local Authorized Users (synchronized with cPanel database)
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 'cpanel-1',
-      name: 'Daniel Kiboko',
-      email: 'crm@rayons.net',
-      role: 'admin',
-      companyName: 'Rayons.net SaaS',
-      status: 'active',
-      createdAt: '2026-01-01T00:00:00Z',
-      lastLogin: 'En ligne maintenant'
-    },
-    {
-      id: 'cpanel-2',
-      name: 'Sarah Laurent',
-      email: 'sarah.laurent@rayons.net',
-      role: 'sales',
-      companyName: 'Rayons.net SaaS',
-      status: 'active',
-      createdAt: '2026-03-15T09:00:00Z',
-      lastLogin: '2026-09-12 14:20'
-    }
-  ]);
-
-  // Form New User
+  // New user form state
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('RayonsUser2026!');
-  const [newRole, setNewRole] = useState<UserRole>('sales');
-  const [isAddingUser, setIsAddingUser] = useState(false);
-  const [addNotice, setAddNotice] = useState<string | null>(null);
+  const [newCompany, setNewCompany] = useState('');
+  const [newInitialPlan, setNewInitialPlan] = useState<'trial' | 'pro_monthly'>('trial');
 
-  // Test cPanel endpoint
-  const handleTestCpanel = async () => {
-    setIsTestingCpanel(true);
-    setCpanelMessage(null);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'test-ping@rayons.net', password: 'test' })
-      });
-      const data = await res.json();
-      
-      // If we got a response from the route
-      if (res.status === 401 || res.status === 403 || data.error) {
-        setCpanelStatus('success');
-        setCpanelMessage('La passerelle d\'authentification répond correctement. Le filtrage de sécurité est 100% actif.');
-      } else {
-        setCpanelStatus('success');
-        setCpanelMessage('Passerelle opérationnelle.');
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPlan, setFilterPlan] = useState<'all' | 'trial' | 'pro_monthly' | 'expired'>('all');
+
+  useEffect(() => {
+    const local = getSaasUsers();
+    setUsers(local);
+
+    // Sync with Cloud Firestore
+    fetchAllUsersFromFirestore().then((cloudUsers) => {
+      if (cloudUsers && cloudUsers.length > 0) {
+        const mergedMap = new Map<string, User>();
+        local.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+        cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), { ...mergedMap.get(u.email.toLowerCase()), ...u }));
+        const merged = Array.from(mergedMap.values());
+        setUsers(merged);
+        saveSaasUsers(merged);
       }
-    } catch (err) {
-      setCpanelStatus('warning');
-      setCpanelMessage('Passerelle en attente du dépôt des fichiers PHP sur votre cPanel Hostinger. Le mode Super Admin de secours reste actif.');
-    } finally {
-      setIsTestingCpanel(false);
+    }).catch(() => {});
+  }, []);
+
+  const isMasterAdmin = currentUser?.role === 'superadmin' || 
+    currentUser?.email?.toLowerCase() === 'danielkiboko218@gmail.com' ||
+    currentUser?.email?.toLowerCase() === 'crm@rayons.net' || 
+    currentUser?.email?.toLowerCase() === 'daniel.kiboko@rayons.net';
+
+  if (!isMasterAdmin) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '80px auto', textAlign: 'center', padding: '40px 24px', background: '#0a0a0a', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '4px', background: '#000', border: '1px solid #ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <Lock size={22} />
+        </div>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ffffff', marginBottom: '8px' }}>
+          Accès Restreint au C-Panel Central
+        </h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '24px' }}>
+          Ce module d'administration globale est strictement réservé au Super-Administrateur (<span style={{ color: '#ffffff', fontFamily: 'monospace' }}>crm@rayons.net</span>). Les données et les comptes de vos clients sont isolés.
+        </p>
+        <button onClick={() => router.push('/')} className="btn btn-primary">
+          Retour à mon Espace de Travail
+        </button>
+      </div>
+    );
+  }
+
+  const showToast = (msg: string) => {
+    setToastNotice(msg);
+    setTimeout(() => setToastNotice(null), 4000);
+  };
+
+  // SaaS KPIs Calculations
+  const totalUsersCount = users.length;
+  const trialUsers = users.filter(u => {
+    const status = checkUserTrialStatus(u);
+    return status.isTrialActive && !status.isSuperAdmin;
+  });
+  const proSubscribers = users.filter(u => {
+    const status = checkUserTrialStatus(u);
+    return (status.isProActive && !status.isSuperAdmin) || u.subscriptionPlan === 'pro_monthly';
+  });
+  const expiredUsers = users.filter(u => {
+    const status = checkUserTrialStatus(u);
+    return status.isExpired && !status.isSuperAdmin;
+  });
+  const currentMRR = proSubscribers.length * 30; // $30/mo
+
+  // Action Handlers
+  const handleUpgradeToPro = (user: User) => {
+    const updated = updateSaasUser(user.id, {
+      subscriptionPlan: 'pro_monthly',
+      subscriptionStatus: 'pro_active',
+      subscriptionPrice: 30,
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    });
+    setUsers(updated);
+    const updatedUser = updated.find(u => u.id === user.id);
+    if (updatedUser) syncUserToFirestore(updatedUser).catch(() => {});
+    showToast(`✅ ${user.name} a été activé en Abonné Pro (30 $/mois) !`);
+  };
+
+  const handleExtendTrial = (user: User) => {
+    const currentEnd = user.trialEndsAt ? new Date(user.trialEndsAt).getTime() : Date.now();
+    const newEnd = new Date(Math.max(Date.now(), currentEnd) + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const updated = updateSaasUser(user.id, {
+      subscriptionPlan: 'trial',
+      subscriptionStatus: 'trial_active',
+      trialEndsAt: newEnd
+    });
+    setUsers(updated);
+    const updatedUser = updated.find(u => u.id === user.id);
+    if (updatedUser) syncUserToFirestore(updatedUser).catch(() => {});
+    showToast(`⏱️ Essai prolongé de 7 jours pour ${user.name} !`);
+  };
+
+  const handleToggleSuspend = (user: User) => {
+    const nextStatus = user.status === 'suspended' ? 'active' : 'suspended';
+    const updated = updateSaasUser(user.id, { status: nextStatus });
+    setUsers(updated);
+    const updatedUser = updated.find(u => u.id === user.id);
+    if (updatedUser) syncUserToFirestore(updatedUser).catch(() => {});
+    showToast(`Compte ${user.email} ${nextStatus === 'suspended' ? 'bloqué' : 'débloqué'}.`);
+  };
+
+  const handleDeleteUser = (user: User) => {
+    if (user.role === 'superadmin' || user.email === 'crm@rayons.net') {
+      alert('Impossible de supprimer le compte Super-Admin Master !');
+      return;
+    }
+    if (confirm(`Supprimer définitivement le compte de ${user.name} (${user.email}) ?`)) {
+      const updated = deleteSaasUser(user.id);
+      setUsers(updated);
+      deleteUserFromFirestore(user.id).catch(() => {});
+      showToast(`Compte supprimé.`);
     }
   };
 
-  // Toggle user status
-  const handleToggleStatus = (userId: string) => {
-    setUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        const nextStatus = u.status === 'active' ? 'suspended' : 'active';
-        return { ...u, status: nextStatus };
-      }
-      return u;
-    }));
-  };
-
-  // Add new user
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail || !newName) return;
+    if (!newName || !newEmail) return;
 
-    const created: User = {
-      id: `cpanel-${Date.now()}`,
-      name: newName,
-      email: newEmail.toLowerCase(),
-      role: newRole,
-      companyName: 'Rayons.net SaaS',
+    const isPro = newInitialPlan === 'pro_monthly';
+    const newUserData: User = {
+      id: `user-${Date.now()}`,
+      name: newName.trim(),
+      email: newEmail.trim().toLowerCase(),
+      companyName: newCompany.trim() || 'Client SaaS',
+      role: 'admin',
+      createdAt: new Date().toISOString(),
       status: 'active',
-      createdAt: new Date().toISOString()
+      subscriptionPlan: newInitialPlan,
+      subscriptionPrice: 30,
+      subscriptionStatus: isPro ? 'pro_active' : 'trial_active',
+      trialEndsAt: isPro ? undefined : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      subscriptionExpiresAt: isPro ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : undefined
     };
 
-    setUsers(prev => [created, ...prev]);
-    setAddNotice(`Accès créé pour ${newEmail} avec le rôle ${newRole.toUpperCase()}.`);
+    const created = addSaasUser(newUserData);
+    setUsers(created);
+    syncUserToFirestore(newUserData).catch(() => {});
+    setIsAddingUser(false);
     setNewName('');
     setNewEmail('');
-    setTimeout(() => setAddNotice(null), 4000);
+    setNewCompany('');
+    showToast(`Compte créé avec succès pour ${newEmail} !`);
   };
+
+  // Filtered list
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = 
+      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.companyName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const trial = checkUserTrialStatus(u);
+    let matchesPlan = true;
+    if (filterPlan === 'trial') matchesPlan = trial.isTrialActive;
+    if (filterPlan === 'pro_monthly') matchesPlan = trial.isProActive && !trial.isSuperAdmin;
+    if (filterPlan === 'expired') matchesPlan = trial.isExpired && !trial.isSuperAdmin;
+
+    return matchesSearch && matchesPlan;
+  });
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Page Header Starlink */}
-      <div style={{ marginBottom: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-          <span className="badge badge-outline" style={{ fontSize: '0.68rem', letterSpacing: '0.05em' }}>
-            SÉCURITÉ & ADMINISTRATION SAAS
-          </span>
+      {/* Toast Notice */}
+      {toastNotice && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          background: '#000000',
+          border: '1px solid #ffffff',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: 'var(--radius-sm)',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.9)',
+          zIndex: 99999,
+          fontSize: '0.85rem'
+        }}>
+          {toastNotice}
         </div>
-        <h1 style={{ fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-0.02em', textTransform: 'uppercase', marginBottom: '8px' }}>
-          Contrôle Centralisé des Accès (Rayons.net)
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '850px', lineHeight: 1.5 }}>
-          Gestion des autorisations d'entrée. Aucun visiteur externe ne peut s'inscrire librement. Tous les comptes sont validés et administrés depuis votre passerelle centrale cPanel.
-        </p>
-      </div>
+      )}
 
-      {/* cPanel Gateway Status Card */}
-      <div className="card" style={{ padding: '24px', marginBottom: '28px', border: '1px solid #ffffff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '44px', height: '44px', background: '#000000', border: '1px solid #ffffff', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Server size={22} color="#ffffff" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                Passerelle cPanel : rayons.net/api/crm-auth.php
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Protocole central d'autorisation des sessions et synchronisation MySQL
-              </div>
-            </div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>C-Panel SaaS & Gestion des Utilisateurs</h1>
+            <span className="badge badge-primary" style={{ fontSize: '0.72rem' }}>
+              ADMINISTRATION AUTONOME
+            </span>
           </div>
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={handleTestCpanel}
-              disabled={isTestingCpanel}
-              className="btn btn-primary"
-            >
-              {isTestingCpanel ? (
-                <>
-                  <RefreshCw size={14} className="spin" />
-                  Test en cours...
-                </>
-              ) : (
-                <>
-                  <ShieldCheck size={15} />
-                  Tester la Passerelle
-                </>
-              )}
-            </button>
-
-            <a
-              href="https://rayons.net/api/admin.php"
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary"
-            >
-              <ExternalLink size={14} />
-              Ouvrir la Console cPanel
-            </a>
-          </div>
-        </div>
-
-        {cpanelMessage && (
-          <div style={{
-            marginTop: '18px',
-            padding: '12px 16px',
-            background: '#000000',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '4px',
-            fontSize: '0.82rem',
-            color: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            <CheckCircle2 size={16} />
-            {cpanelMessage}
-          </div>
-        )}
-      </div>
-
-      {/* Two columns: Add User Form + Active Users Table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '28px' }}>
-        {/* Left Column: Create User Access */}
-        <div className="card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-            <UserPlus size={18} />
-            <h2 style={{ fontSize: '1.05rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              Délivrer un Nouvel Accès
-            </h2>
-          </div>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Créez un compte pour un commercial, collaborateur ou client. Il pourra se connecter avec cet email et mot de passe.
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+            Contrôlez les inscriptions autonomes, les périodes d'essai de 7 jours et les abonnements mensuels à 30 $ / mois.
           </p>
+        </div>
 
-          {addNotice && (
-            <div style={{ padding: '10px 14px', background: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '0.8rem', borderRadius: '4px', marginBottom: '16px' }}>
-              {addNotice}
-            </div>
-          )}
+        <button 
+          onClick={() => setIsAddingUser(!isAddingUser)} 
+          className="btn btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          {isAddingUser ? 'Fermer' : <><Plus size={16} /> Créer un Utilisateur</>}
+        </button>
+      </div>
 
-          <form onSubmit={handleAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div>
-              <label className="label">Nom et Prénom</label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="ex: Marc Dubois"
-                className="input"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="label">Email Professionnel Autorisé</label>
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="m.dubois@rayons.net"
-                className="input"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="label">Mot de Passe Provisoire</label>
-              <input
-                type="text"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="input"
-                style={{ fontFamily: 'monospace' }}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="label">Niveau de Permissions (Rôle)</label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as UserRole)}
-                className="select"
-              >
-                <option value="sales">Commercial / Sales (Campagnes, Leads, Unibox)</option>
-                <option value="admin">Administrateur (Tous les droits)</option>
-                <option value="viewer">Observateur (Rapports et statistiques en lecture seule)</option>
-              </select>
-            </div>
-
-            <button type="submit" className="btn btn-primary" style={{ marginTop: '8px', justifyContent: 'center' }}>
-              <KeyRound size={15} />
-              Valider et Enregistrer l'Accès
-            </button>
-          </form>
-
-          {/* Invitation Master Code Info */}
-          <div style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
-              Code d'Invitation Maître
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#000000', border: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.9rem', color: '#ffffff' }}>
-                RAYONS-2026
-              </span>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                Réservé à Daniel Kiboko
-              </span>
-            </div>
+      {/* 4 SaaS BUSINESS METRICS CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+        <div className="card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Total Utilisateurs
+            </span>
+            <Users size={18} color="#ffffff" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Space Grotesk' }}>
+            {totalUsersCount}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: '4px' }}>
+            Inscriptions self-service
           </div>
         </div>
 
-        {/* Right Column: Authorized Users List */}
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Essais en Cours (7j)
+            </span>
+            <Clock size={18} color="#facc15" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Space Grotesk', color: '#facc15' }}>
+            {trialUsers.length}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: '4px' }}>
+            Période de test active
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Abonnés Pro ($30/m)
+            </span>
+            <Sparkles size={18} color="#10b981" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Space Grotesk', color: '#10b981' }}>
+            {proSubscribers.length}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: '4px' }}>
+            Clients payants actifs
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Revenu Mensuel (MRR)
+            </span>
+            <DollarSign size={18} color="#ffffff" />
+          </div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Space Grotesk', color: '#ffffff' }}>
+            {currentMRR} $
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', marginTop: '4px' }}>
+            30 $ / utilisateur / mois
+          </div>
+        </div>
+      </div>
+
+      {/* NEW USER FORM MODAL */}
+      {isAddingUser && (
+        <div className="card" style={{ marginBottom: '28px', border: '1px solid #ffffff', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-            <div>
-              <h2 style={{ fontSize: '1.05rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em', marginBottom: '2px' }}>
-                Comptes Autorisés ({users.length})
-              </h2>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Seules ces personnes peuvent franchir le portail d'authentification
-              </p>
-            </div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserPlus size={18} /> Créer un Compte Utilisateur
+            </h2>
+            <button onClick={() => setIsAddingUser(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <X size={18} />
+            </button>
           </div>
 
-          <div className="table-container">
-            <table className="custom-table" style={{ margin: 0 }}>
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Rôle</th>
-                  <th>Statut</th>
-                  <th>Dernière Connexion</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.85rem' }}>
-                        {u.name}
-                      </div>
-                      <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                        {u.email}
-                      </div>
+          <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label className="label">Nom et Prénom *</label>
+                <input 
+                  type="text" 
+                  value={newName} 
+                  onChange={(e) => setNewName(e.target.value)} 
+                  className="input" 
+                  placeholder="Ex: David Martin" 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="label">Adresse Email *</label>
+                <input 
+                  type="email" 
+                  value={newEmail} 
+                  onChange={(e) => setNewEmail(e.target.value)} 
+                  className="input" 
+                  placeholder="client@entreprise.com" 
+                  required 
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label className="label">Nom de l'Entreprise</label>
+                <input 
+                  type="text" 
+                  value={newCompany} 
+                  onChange={(e) => setNewCompany(e.target.value)} 
+                  className="input" 
+                  placeholder="Ex: SaaS Agency" 
+                />
+              </div>
+              <div>
+                <label className="label">Plan d'attribution</label>
+                <select 
+                  value={newInitialPlan} 
+                  onChange={(e) => setNewInitialPlan(e.target.value as any)} 
+                  className="select"
+                >
+                  <option value="trial">Essai Gratuit (7 Jours d'accès)</option>
+                  <option value="pro_monthly">Abonnement Pro Actif (30 $/mois)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+              <button type="button" onClick={() => setIsAddingUser(false)} className="btn btn-secondary">
+                Annuler
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Créer et Activer l'Accès
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* USERS MANAGEMENT TABLE */}
+      <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
+        {/* Table Controls */}
+        <div style={{ padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.01)' }}>
+          <input 
+            type="text" 
+            placeholder="Rechercher par nom, email ou entreprise..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            className="input" 
+            style={{ width: '320px', height: '36px', fontSize: '0.82rem' }} 
+          />
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[
+              { id: 'all', label: 'Tous' },
+              { id: 'trial', label: 'En Essai 7j' },
+              { id: 'pro_monthly', label: 'Abonnés 30 $/m' },
+              { id: 'expired', label: 'Essais Expirés' }
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilterPlan(f.id as any)}
+                className={`btn btn-sm ${filterPlan === f.id ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.75rem' }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: '0.82rem', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }}>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Utilisateur</th>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Entreprise</th>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Inscription</th>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Statut SaaS & Essai</th>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Tarification</th>
+                <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Actions C-Panel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map((u) => {
+                const trial = checkUserTrialStatus(u);
+                const isSuperAdmin = trial.isSuperAdmin;
+
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    {/* User Info */}
+                    <td style={{ padding: '14px 20px' }}>
+                      <div style={{ fontWeight: 700, color: '#ffffff' }}>{u.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{u.email}</div>
                     </td>
 
-                    <td>
-                      <span className="badge" style={{
-                        fontSize: '0.65rem',
-                        background: u.role === 'admin' ? '#ffffff' : '#000000',
-                        color: u.role === 'admin' ? '#000000' : '#ffffff',
-                        border: '1px solid #ffffff'
-                      }}>
-                        {u.role.toUpperCase()}
-                      </span>
+                    {/* Company */}
+                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)' }}>
+                      {u.companyName}
                     </td>
 
-                    <td>
-                      <span className="badge" style={{
-                        fontSize: '0.65rem',
-                        background: u.status === 'active' ? '#ffffff' : '#111111',
-                        color: u.status === 'active' ? '#000000' : '#888888',
-                        border: '1px solid var(--border-subtle)'
-                      }}>
-                        {u.status === 'active' ? 'ACTIF' : 'SUSPENDU'}
-                      </span>
+                    {/* Created Date */}
+                    <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                      {new Date(u.createdAt).toLocaleDateString('fr-FR')}
                     </td>
 
-                    <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {u.lastLogin || 'Jamais'}
+                    {/* Trial / Subscription Status */}
+                    <td style={{ padding: '14px 20px' }}>
+                      {isSuperAdmin ? (
+                        <span className="badge badge-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={12} /> SUPER-ADMIN
+                        </span>
+                      ) : u.status === 'suspended' ? (
+                        <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#f87171' }}>
+                          <AlertTriangle size={12} /> ACCÈS BLOQUÉ
+                        </span>
+                      ) : trial.isProActive ? (
+                        <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Sparkles size={12} /> ABONNÉ ACTIF
+                        </span>
+                      ) : trial.isTrialActive ? (
+                        <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12} /> ESSAI : {trial.daysRemaining}J RESTANTS
+                        </span>
+                      ) : (
+                        <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Lock size={12} /> ESSAI EXPIRÉ
+                        </span>
+                      )}
                     </td>
 
-                    <td>
-                      {u.email !== 'crm@rayons.net' && (
-                        <button
-                          onClick={() => handleToggleStatus(u.id)}
-                          className="btn btn-secondary btn-sm"
-                          style={{ fontSize: '0.7rem', padding: '4px 8px' }}
-                        >
-                          {u.status === 'active' ? 'Suspendre' : 'Réactiver'}
-                        </button>
+                    {/* Price */}
+                    <td style={{ padding: '14px 20px' }}>
+                      {isSuperAdmin ? (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Illimité</span>
+                      ) : trial.isProActive ? (
+                        <span style={{ fontWeight: 700, color: '#ffffff' }}>30 $ / mois</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Essai gratuit (0 $)</span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                      {!isSuperAdmin ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          {/* Upgrade to Pro 30$/mo button */}
+                          {!trial.isProActive && (
+                            <button
+                              onClick={() => handleUpgradeToPro(u)}
+                              className="btn btn-sm"
+                              style={{ background: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '0.72rem', padding: '4px 10px' }}
+                              title="Activer l'abonnement à 30 $/mois pour cet utilisateur"
+                            >
+                              Passer en Pro (30 $)
+                            </button>
+                          )}
+
+                          {/* Extend Trial */}
+                          {trial.isTrialActive || trial.isExpired ? (
+                            <button
+                              onClick={() => handleExtendTrial(u)}
+                              className="btn btn-secondary btn-sm"
+                              style={{ fontSize: '0.72rem', padding: '4px 8px' }}
+                              title="Prolonger l'essai gratuit de 7 jours"
+                            >
+                              +7 Jours
+                            </button>
+                          ) : null}
+
+                          {/* Suspend / Block Toggle */}
+                          <button
+                            onClick={() => handleToggleSuspend(u)}
+                            className="btn btn-sm"
+                            style={{ 
+                              fontSize: '0.72rem', 
+                              padding: '4px 10px', 
+                              background: u.status === 'suspended' ? '#22c55e' : 'transparent',
+                              color: u.status === 'suspended' ? '#000000' : '#ef4444',
+                              border: u.status === 'suspended' ? 'none' : '1px solid rgba(239,68,68,0.4)',
+                              fontWeight: 700
+                            }}
+                            title={u.status === 'suspended' ? 'Débloquer l\'accès pour cet utilisateur' : 'Bloquer immédiatement cet utilisateur'}
+                          >
+                            {u.status === 'suspended' ? 'Débloquer' : 'Bloquer'}
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                            title="Supprimer définitivement"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>Compte Maître</span>
                       )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
 
-          {/* Integration Guide Box */}
-          <div style={{ marginTop: '20px', padding: '16px', background: '#000000', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#ffffff', fontSize: '0.82rem', fontWeight: 700 }}>
-              <Database size={16} />
-              Dossier cPanel prêt dans votre projet
-            </div>
-            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-              Les fichiers nécessaires pour votre cPanel Hostinger sont générés dans le dossier <code>cpanel-rayons-net/</code> de votre projet : <code>database.sql</code>, <code>crm-auth.php</code> et <code>admin.php</code>.
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    Aucun utilisateur trouvé pour ces critères.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Rules Summary Box */}
+      <div className="card" style={{ marginTop: '28px', background: 'rgba(255,255,255,0.015)' }}>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ShieldCheck size={16} /> Règles du Modèle Économique & Sécurité SaaS
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+          <div>
+            <strong style={{ color: '#fff' }}>1. Inscription Autonome (Self-Service)</strong>
+            <p style={{ marginTop: '4px' }}>
+              Tout nouvel utilisateur peut créer son compte gratuitement. Il obtient immédiatement 7 jours d'accès complet pour tester les envois et importer ses fichiers.
+            </p>
+          </div>
+          <div>
+            <strong style={{ color: '#fff' }}>2. Blocage Automatique au 8ème Jour</strong>
+            <p style={{ marginTop: '4px' }}>
+              Dès que les 7 jours sont écoulés, le Paywall bloque l'accès aux fonctionnalités d'envoi et demande la souscription à 30 $ / mois.
+            </p>
+          </div>
+          <div>
+            <strong style={{ color: '#fff' }}>3. Contrôle Total depuis ce C-Panel</strong>
+            <p style={{ marginTop: '4px' }}>
+              Vous pouvez à tout moment activer manuellement un client en Abonné Pro, lui accorder des jours supplémentaires, ou suspendre son compte.
             </p>
           </div>
         </div>

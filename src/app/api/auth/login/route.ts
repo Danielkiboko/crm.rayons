@@ -5,8 +5,9 @@ const CPANEL_API_KEY = process.env.CPANEL_API_KEY || 'rayons_crm_secret_master_k
 
 // Super Admin master credentials (emergency override to prevent lockouts)
 const SUPER_ADMIN_CREDENTIALS = {
-  email: 'crm@rayons.net',
-  altEmail: 'daniel.kiboko@rayons.net',
+  email: 'danielkiboko218@gmail.com',
+  altEmail: 'crm@rayons.net',
+  altEmail2: 'daniel.kiboko@rayons.net',
   passwords: ['RayonsAdmin2026!', 'KibokoAdmin2026!']
 };
 
@@ -75,13 +76,13 @@ export async function POST(request: Request) {
     const isSuperAdminEmail = 
       email === SUPER_ADMIN_CREDENTIALS.email || 
       email === SUPER_ADMIN_CREDENTIALS.altEmail || 
+      email === SUPER_ADMIN_CREDENTIALS.altEmail2 ||
       email === 'daniel@rayons.net';
 
     if (isSuperAdminEmail) {
       const isMasterPass = 
         SUPER_ADMIN_CREDENTIALS.passwords.includes(password) || 
-        password === 'RayonsAdmin2026!' || 
-        password === 'admin';
+        password === 'RayonsAdmin2026!';
 
       if (isMasterPass) {
         return NextResponse.json({
@@ -90,8 +91,8 @@ export async function POST(request: Request) {
           user: {
             id: 'super-admin-daniel',
             name: 'Daniel Kiboko',
-            email: 'crm@rayons.net',
-            role: 'admin',
+            email: 'danielkiboko218@gmail.com',
+            role: 'superadmin',
             companyName: 'Rayons.net SaaS',
             status: 'active',
             createdAt: '2026-01-01T00:00:00Z'

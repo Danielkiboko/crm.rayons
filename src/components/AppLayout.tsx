@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import AuthGuard from '@/components/AuthGuard';
+import PaywallModal from '@/components/PaywallModal';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {children}
             </main>
           </div>
+          <PaywallModal />
         </div>
       )}
     </AuthGuard>

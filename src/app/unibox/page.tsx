@@ -15,13 +15,25 @@ import {
   Smile, 
   Building2, 
   Phone,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { UniboxMessage } from '@/types';
 
 export default function UniboxPage() {
-  const { messages, markMessageRead, sendReply, changeMessageSentiment, createDeal, deals } = useCrm();
+  const { 
+    messages, 
+    markMessageRead, 
+    sendReply, 
+    changeMessageSentiment, 
+    createDeal, 
+    deals,
+    syncInboxReplies,
+    emailAccounts 
+  } = useCrm();
+
+  const defaultAccount = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
 
   const [selectedMessageId, setSelectedMessageId] = useState<string>(messages[0]?.id || '');
   const [filterChannel, setFilterChannel] = useState<'all' | 'email' | 'linkedin'>('all');
@@ -29,6 +41,19 @@ export default function UniboxPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [replyText, setReplyText] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncReplies = async () => {
+    setIsSyncing(true);
+    const res = await syncInboxReplies();
+    setIsSyncing(false);
+    if (res.success && res.newCount > 0) {
+      setToastMessage(`${res.newCount} nouvelle(s) réponse(s) synchronisée(s) depuis votre boîte e-mail !`);
+    } else {
+      setToastMessage('Boîte e-mail synchronisée. Aucune nouvelle réponse pour le moment.');
+    }
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // Filter messages
   const filteredMessages = messages.filter(m => {
@@ -140,6 +165,25 @@ export default function UniboxPage() {
             className={filterChannel === 'linkedin' ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
           >
             <Linkedin size={13} /> LinkedIn
+          </button>
+
+          <button 
+            onClick={handleSyncReplies} 
+            disabled={isSyncing}
+            className="btn btn-sm"
+            style={{ 
+              background: '#ffffff', 
+              color: '#000000', 
+              fontWeight: 700, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              marginLeft: '8px' 
+            }}
+            title="Synchroniser la boîte de réception IMAP"
+          >
+            <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
+            {isSyncing ? 'Synchronisation...' : 'Synchroniser Réponses'}
           </button>
         </div>
       </div>

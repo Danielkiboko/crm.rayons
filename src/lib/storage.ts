@@ -1,4 +1,4 @@
-import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate } from '@/types';
+import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, EmailAccount } from '@/types';
 
 export const INITIAL_IMAGE_TEMPLATES: ImageTemplate[] = [
   {
@@ -204,7 +204,7 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
     repliedCount: 32,
     interestedCount: 18,
     bounceCount: 4,
-    senderAccounts: ['crm@rayons.net'],
+    senderAccounts: ['danielkiboko218@gmail.com'],
     dailyLimit: 60,
     timezone: 'Europe/Paris',
     scheduleDays: [1, 2, 3, 4, 5],
@@ -314,8 +314,8 @@ export const INITIAL_CAMPAIGNS: Campaign[] = [
 ];
 
 export const INITIAL_WARMUP_CONFIG: WarmupConfig = {
-  mailboxEmail: 'crm@rayons.net',
-  provider: 'smtp',
+  mailboxEmail: 'danielkiboko218@gmail.com',
+  provider: 'google',
   active: true,
   currentScore: 98,
   dailyWarmupSent: 34,
@@ -456,6 +456,28 @@ export const INITIAL_DEALS: Deal[] = [
   }
 ];
 
+export const INITIAL_EMAIL_ACCOUNTS: EmailAccount[] = [
+  {
+    id: 'acc-google-daniel',
+    name: 'Daniel Kiboko | Gmail',
+    email: 'danielkiboko218@gmail.com',
+    provider: 'google',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 465,
+    smtpSecure: true,
+    smtpUser: 'danielkiboko218@gmail.com',
+    smtpPass: '',
+    imapHost: 'imap.gmail.com',
+    imapPort: 993,
+    imapSecure: true,
+    imapUser: 'danielkiboko218@gmail.com',
+    imapPass: '',
+    status: 'untested',
+    isDefault: true,
+    createdAt: '2026-09-13T09:00:00Z'
+  }
+];
+
 // Helper functions for client-side persistence and dynamic updates
 const STORAGE_KEYS = {
   CAMPAIGNS: 'lemlist_crm_campaigns',
@@ -463,7 +485,8 @@ const STORAGE_KEYS = {
   UNIBOX: 'lemlist_crm_unibox',
   DEALS: 'lemlist_crm_deals',
   WARMUP: 'lemlist_crm_warmup',
-  TEMPLATES: 'lemlist_crm_templates'
+  TEMPLATES: 'lemlist_crm_templates',
+  EMAIL_ACCOUNTS: 'lemlist_crm_email_accounts'
 };
 
 export function getStoredData<T>(key: string, fallback: T): T {

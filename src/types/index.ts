@@ -1,16 +1,22 @@
 export type ChannelType = 'email' | 'linkedin' | 'call' | 'task';
 
-export type UserRole = 'admin' | 'sales' | 'viewer';
+export type UserRole = 'superadmin' | 'admin' | 'sales' | 'viewer';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string;
   role: UserRole;
   avatar?: string;
   companyName: string;
   createdAt: string;
   status?: 'active' | 'suspended';
+  subscriptionPlan?: 'trial' | 'pro_monthly' | 'lifetime';
+  subscriptionPrice?: number; // 30
+  subscriptionStatus?: 'trial_active' | 'pro_active' | 'expired' | 'cancelled';
+  trialEndsAt?: string; // ISO string 7 days from creation
+  subscriptionExpiresAt?: string;
   lastLogin?: string;
 }
 
@@ -147,3 +153,26 @@ export interface ImageTemplate {
   showCompanyLogo?: boolean;
   logoPosition?: { x: number; y: number; width: number; height: number };
 }
+
+export interface EmailAccount {
+  id: string;
+  name: string;
+  email: string;
+  provider: 'hostinger' | 'google' | 'microsoft' | 'custom';
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+  imapHost?: string;
+  imapPort?: number;
+  imapSecure?: boolean;
+  imapUser?: string;
+  imapPass?: string;
+  status: 'connected' | 'error' | 'untested';
+  lastTested?: string;
+  errorMessage?: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+

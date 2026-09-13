@@ -3,37 +3,37 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { User, UserRole } from '@/types';
+import { 
+  checkUserTrialStatus, 
+  getSaasUsers, 
+  addSaasUser, 
+  updateSaasUser, 
+  verifyUserCredentials, 
+  isEmailRegistered 
+} from '@/lib/userStore';
+import { 
+  syncUserToFirestore, 
+  fetchUserByEmailFromFirestore 
+} from '@/lib/firestoreService';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  trialStatus: {
+    isSuperAdmin: boolean;
+    isProActive: boolean;
+    isTrialActive: boolean;
+    isExpired: boolean;
+    daysRemaining: number;
+  };
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, pass: string, company: string) => Promise<{ success: boolean; error?: string }>;
-  loginAsDemo: (role: 'admin' | 'sales') => void;
+  upgradeToPro: () => void;
   logout: () => void;
 }
 
-const DEMO_USERS: Record<string, User> = {
-  admin: {
-    id: 'user-admin-1',
-    name: 'Daniel Kiboko',
-    email: 'daniel.kiboko@lemflow.io',
-    role: 'admin',
-    companyName: 'LemFlow SaaS',
-    createdAt: '2026-01-10T08:00:00Z'
-  },
-  sales: {
-    id: 'user-sales-1',
-    name: 'Sarah Laurent',
-    email: 'sarah.laurent@lemflow.io',
-    role: 'sales',
-    companyName: 'LemFlow SaaS',
-    createdAt: '2026-03-15T09:00:00Z'
-  }
-};
-
-const AUTH_STORAGE_KEY = 'lemflow_auth_session';
+const AUTH_STORAGE_KEY = 'rayons_crm_auth_session';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -48,7 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
-        setUser(JSON.parse(stored));
+        const parsed: User = JSON.parse(stored);
+        // Refresh with current database state if available
+        const allUsers = getSaasUsers();
+        const fresh = allUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === parsed.email.toLowerCase());
+        setUser(fresh || parsed);
       }
     } catch (e) {
       console.error('Failed to read auth session from storage', e);
@@ -57,76 +61,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const trialStatus = checkUserTrialStatus(user);
+
   const login = async (email: string, pass: string) => {
     setIsLoading(true);
 
     if (!email || !pass) {
       setIsLoading(false);
-      return { success: false, error: 'Veuillez saisir votre email et votre mot de passe.' };
+      return { success: false, error: 'Veuillez renseigner votre email et votre mot de passe.' };
     }
 
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        setIsLoading(false);
-        return { 
-          success: false, 
-          error: data.error || 'Accès refusé. Vos identifiants ne sont pas autorisés.' 
-        };
-      }
-
-      setUser(data.user);
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+    // Strict credential verification against the autonomous user store
+    const verification = verifyUserCredentials(email, pass);
+    if (!verification.success || !verification.user) {
       setIsLoading(false);
-      router.push('/');
-      return { success: true };
-    } catch (err) {
-      console.error('Login error:', err);
-      setIsLoading(false);
-      return { 
-        success: false, 
-        error: 'Erreur de connexion au serveur d\'authentification central rayons.net.' 
-      };
-    }
-  };
-
-  const register = async (name: string, email: string, pass: string, company: string) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-
-    if (!name || !email || !pass) {
-      setIsLoading(false);
-      return { success: false, error: 'Tous les champs obligatoires doivent être remplis.' };
+      return { success: false, error: verification.error || 'Identifiants invalides.' };
     }
 
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name,
-      email: email.toLowerCase(),
-      role: 'admin',
-      companyName: company || 'Mon Entreprise',
-      createdAt: new Date().toISOString()
-    };
-
-    setUser(newUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
+    const loggedUser = verification.user;
+    setUser(loggedUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
+    syncUserToFirestore(loggedUser).catch(() => {});
     setIsLoading(false);
     router.push('/');
     return { success: true };
   };
 
-  const loginAsDemo = (role: 'admin' | 'sales') => {
-    const demo = DEMO_USERS[role];
-    setUser(demo);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demo));
+  const register = async (name: string, email: string, pass: string, company: string) => {
+    setIsLoading(true);
+
+    if (!name || !email || !pass) {
+      setIsLoading(false);
+      return { success: false, error: 'Tous les champs obligatoires doivent être renseignés.' };
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Check if email already has an account
+    if (isEmailRegistered(cleanEmail)) {
+      setIsLoading(false);
+      return { 
+        success: false, 
+        error: 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter avec votre mot de passe.' 
+      };
+    }
+
+    // New User gets 7 days free trial
+    const newUser: User = {
+      id: `user-${Date.now()}`,
+      name: name.trim(),
+      email: cleanEmail,
+      password: pass,
+      role: cleanEmail === 'crm@rayons.net' ? 'superadmin' : 'admin',
+      companyName: company?.trim() || 'Mon Entreprise',
+      createdAt: new Date().toISOString(),
+      status: 'active',
+      subscriptionPlan: 'trial',
+      subscriptionPrice: 30,
+      subscriptionStatus: 'trial_active',
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    };
+
+    addSaasUser(newUser);
+    setUser(newUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
+    syncUserToFirestore(newUser).catch(() => {});
+    setIsLoading(false);
     router.push('/');
+    return { success: true };
+  };
+
+  const upgradeToPro = () => {
+    if (!user) return;
+    const updated = {
+      ...user,
+      subscriptionPlan: 'pro_monthly' as const,
+      subscriptionStatus: 'pro_active' as const,
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    updateSaasUser(user.id, updated);
+    setUser(updated);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    syncUserToFirestore(updated).catch(() => {});
   };
 
   const logout = () => {
@@ -141,9 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        trialStatus,
         login,
         register,
-        loginAsDemo,
+        upgradeToPro,
         logout
       }}
     >

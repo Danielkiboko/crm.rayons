@@ -16,14 +16,18 @@ import {
   Building2, 
   ShieldCheck,
   FileSpreadsheet,
+  FileUp,
   X,
   ArrowRight,
   RefreshCw,
-  CheckCheck
+  CheckCheck,
+  Check,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCrm } from '@/context/CrmContext';
 import { Lead } from '@/types';
+import { parseExcelOrCsvFile, ParsedLeadResult } from '@/lib/excelParser';
 
 export default function LeadsPage() {
   const { leads, addLead, importLeads, deleteLead, verifyLeadEmail, verifyAllLeads, campaigns } = useCrm();
@@ -36,6 +40,14 @@ export default function LeadsPage() {
   const [verifyingLeadId, setVerifyingLeadId] = useState<string | null>(null);
   const [isBatchVerifying, setIsBatchVerifying] = useState(false);
   const [batchNotice, setBatchNotice] = useState<string | null>(null);
+
+  // Excel & File Import State
+  const [importMode, setImportMode] = useState<'excel' | 'paste'>('excel');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [parsedExcelResult, setParsedExcelResult] = useState<ParsedLeadResult | null>(null);
+  const [isParsingExcel, setIsParsingExcel] = useState(false);
+  const [autoVerifyOnImport, setAutoVerifyOnImport] = useState(true);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   // New Single Lead Form State
   const [newFirstName, setNewFirstName] = useState('');
@@ -109,6 +121,39 @@ export default function LeadsPage() {
     setNewCompany('');
     setNewJobTitle('');
     setNewLinkedinUrl('');
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedFile(file);
+    setIsParsingExcel(true);
+    setParseError(null);
+    try {
+      const result = await parseExcelOrCsvFile(file);
+      setParsedExcelResult(result);
+    } catch (err: any) {
+      setParseError(err.message || 'Erreur lors de la lecture du fichier');
+    } finally {
+      setIsParsingExcel(false);
+    }
+  };
+
+  const handleConfirmExcelImport = () => {
+    if (!parsedExcelResult || parsedExcelResult.leads.length === 0) return;
+    const count = importLeads(parsedExcelResult.leads);
+    setImportCountMessage(`${count} prospects importés avec succès depuis "${uploadedFile?.name || 'le fichier'}" !`);
+    if (autoVerifyOnImport) {
+      setTimeout(() => {
+        handleBatchVerify();
+      }, 500);
+    }
+    setTimeout(() => {
+      setImportCountMessage(null);
+      setIsImportModalOpen(false);
+      setUploadedFile(null);
+      setParsedExcelResult(null);
+    }, 2000);
   };
 
   const handleParseAndImportCsv = () => {
@@ -404,31 +449,192 @@ export default function LeadsPage() {
         </table>
       </div>
 
-      {/* MODAL 1: CSV IMPORT WIZARD */}
+      {/* MODAL 1: EXCEL & CSV IMPORT WIZARD */}
       {isImportModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div className="modal-content" style={{ maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <FileSpreadsheet size={22} color="#818cf8" />
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Importation CSV & Détection de Colonnes</h2>
+                <FileSpreadsheet size={24} color="#ffffff" />
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Importer un Fichier de Contacts</h2>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Compatible Excel (.xlsx, .xls), exports LinkedIn, Sales Navigator & CSV</div>
+                </div>
               </div>
               <button onClick={() => setIsImportModalOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Collez vos données CSV ou listes exportées de LinkedIn Sales Navigator. Les colonnes seront mappées automatiquement :
-            </p>
+            {/* Mode Switcher */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setImportMode('excel')}
+                className={`btn btn-sm ${importMode === 'excel' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <FileUp size={14} /> Fichier Excel / CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportMode('paste')}
+                className={`btn btn-sm ${importMode === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <FileText size={14} /> Coller du Texte Brut
+              </button>
+            </div>
 
-            <textarea 
-              rows={8}
-              value={csvRawText}
-              onChange={(e) => setCsvRawText(e.target.value)}
-              className="textarea"
-              style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginBottom: '16px' }}
-            />
+            {importMode === 'excel' ? (
+              <div>
+                {/* Upload Drag & Drop Area */}
+                <label 
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '36px 20px',
+                    border: '2px dashed var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(255,255,255,0.02)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'center',
+                    marginBottom: '20px'
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <input 
+                    type="file" 
+                    accept=".xlsx,.xls,.csv" 
+                    onChange={handleFileUpload} 
+                    style={{ display: 'none' }} 
+                  />
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '12px'
+                  }}>
+                    <FileSpreadsheet size={24} color="#ffffff" />
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '4px' }}>
+                    {uploadedFile ? uploadedFile.name : 'Cliquez pour sélectionner ou glissez un fichier Excel / CSV'}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Fichiers acceptés : .xlsx, .xls, .csv (Export LinkedIn, Waalaxy, Apollo, etc.)
+                  </div>
+                </label>
+
+                {isParsingExcel && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '20px', color: 'var(--text-muted)' }}>
+                    <RefreshCw size={18} className="spin" /> Analyse et détection automatique des colonnes...
+                  </div>
+                )}
+
+                {parseError && (
+                  <div style={{ padding: '12px 14px', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', borderRadius: 'var(--radius-md)', color: '#f87171', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={16} /> {parseError}
+                  </div>
+                )}
+
+                {/* Parsed Result Summary */}
+                {parsedExcelResult && (
+                  <div style={{ animation: 'fadeIn 0.2s ease', marginBottom: '20px' }}>
+                    <div style={{
+                      padding: '14px 16px',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                          ✅ {parsedExcelResult.leads.length} contacts détectés
+                        </span>
+                        <span className="badge badge-success" style={{ fontSize: '0.72rem' }}>COLONNES AUTOMATIQUEMENT MAPPÉES</span>
+                      </div>
+
+                      {/* Mapping Chips */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.76rem' }}>
+                        <span className="badge" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          Prénom : <strong>{parsedExcelResult.mappedColumns.firstName || 'Détecté'}</strong>
+                        </span>
+                        <span className="badge" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          Nom : <strong>{parsedExcelResult.mappedColumns.lastName || 'Optionnel'}</strong>
+                        </span>
+                        <span className="badge badge-primary">
+                          Email : <strong>{parsedExcelResult.mappedColumns.email || 'Détecté'}</strong>
+                        </span>
+                        <span className="badge" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          Entreprise : <strong>{parsedExcelResult.mappedColumns.company || 'Détecté'}</strong>
+                        </span>
+                        <span className="badge" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                          Fonction : <strong>{parsedExcelResult.mappedColumns.jobTitle || 'Détecté'}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Preview Table of First 3 Leads */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
+                        Aperçu des premiers contacts :
+                      </div>
+                      <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                              <th style={{ padding: '8px 12px' }}>Nom</th>
+                              <th style={{ padding: '8px 12px' }}>Email</th>
+                              <th style={{ padding: '8px 12px' }}>Entreprise</th>
+                              <th style={{ padding: '8px 12px' }}>Poste</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsedExcelResult.leads.slice(0, 3).map((lead, idx) => (
+                              <tr key={idx} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                                <td style={{ padding: '8px 12px', fontWeight: 600 }}>{lead.firstName} {lead.lastName}</td>
+                                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{lead.email || '—'}</td>
+                                <td style={{ padding: '8px 12px' }}>{lead.company}</td>
+                                <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{lead.jobTitle}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '16px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={autoVerifyOnImport} 
+                        onChange={(e) => setAutoVerifyOnImport(e.target.checked)} 
+                      />
+                      <span>Vérifier automatiquement la délivrabilité des e-mails en direct (RFC 5322 & DNS)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                  Collez vos données CSV brutes (avec séparateur virgule ou point-virgule) :
+                </p>
+                <textarea 
+                  rows={7}
+                  value={csvRawText}
+                  onChange={(e) => setCsvRawText(e.target.value)}
+                  className="textarea"
+                  style={{ fontFamily: 'monospace', fontSize: '0.8rem', marginBottom: '16px' }}
+                />
+              </div>
+            )}
 
             {importCountMessage && (
               <div style={{ padding: '10px 14px', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', borderRadius: 'var(--radius-md)', color: '#34d399', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -437,13 +643,23 @@ export default function LeadsPage() {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
               <button onClick={() => setIsImportModalOpen(false)} className="btn btn-secondary">
                 Annuler
               </button>
-              <button onClick={handleParseAndImportCsv} className="btn btn-primary">
-                Importer & Vérifier les Emails
-              </button>
+              {importMode === 'excel' ? (
+                <button 
+                  onClick={handleConfirmExcelImport} 
+                  disabled={!parsedExcelResult || parsedExcelResult.leads.length === 0}
+                  className="btn btn-primary"
+                >
+                  Importer {parsedExcelResult ? `${parsedExcelResult.leads.length} Prospects` : ''}
+                </button>
+              ) : (
+                <button onClick={handleParseAndImportCsv} className="btn btn-primary">
+                  Importer le CSV
+                </button>
+              )}
             </div>
           </div>
         </div>
