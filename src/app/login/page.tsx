@@ -414,7 +414,7 @@ export default function LoginPage() {
                   const res = await fetch('/api/auth/forgot-password', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: clean })
+                    body: JSON.stringify({ email: clean, clientRegistered: exists })
                   });
                   const data = await res.json();
                   if (data.success) {

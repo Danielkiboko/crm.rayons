@@ -17,14 +17,24 @@ export async function POST(req: NextRequest) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Check if user exists in default database
-    // (Note: in serverless API routes, we check the known users or accept if valid user)
-    const isMasterAdmin = cleanEmail === 'danielkiboko218@gmail.com' || cleanEmail === 'crm@rayons.net';
+    // Strict database check: Initial users or Firestore
     const isUserInInitial = INITIAL_SAAS_USERS.some(u => u.email.toLowerCase() === cleanEmail);
+    let existsInDb = isUserInInitial;
 
-    // If neither master nor initial, we also accept valid client emails registered in the CRM
-    // If clearly invalid domain / not in DB, we reject:
-    if (!isMasterAdmin && !isUserInInitial && cleanEmail.length < 5) {
+    if (!existsInDb) {
+      try {
+        const { fetchUserByEmailFromFirestore } = await import('@/lib/firestoreService');
+        const firestoreUser = await fetchUserByEmailFromFirestore(cleanEmail);
+        if (firestoreUser) {
+          existsInDb = true;
+        }
+      } catch (e) {
+        // firestore query error or unconfigured
+      }
+    }
+
+    // If not found in database and client has not validated from registered users store, reject immediately
+    if (!existsInDb && !body.clientRegistered) {
       return NextResponse.json(
         { success: false, error: "Aucun compte n'est associé à cette adresse e-mail dans la base de données." },
         { status: 404 }
