@@ -17,6 +17,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { isEmailRegistered, updateUserPassword } from '@/lib/userStore';
 
 export default function LoginPage() {
   const { login, register } = useAuth();
@@ -28,10 +29,17 @@ export default function LoginPage() {
   const [company, setCompany] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
   const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotResponse, setForgotResponse] = useState<string | null>(null);
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotConfirmPass, setForgotConfirmPass] = useState('');
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,7 +116,7 @@ export default function LoginPage() {
         }}>
           <button
             type="button"
-            onClick={() => { setMode('login'); setErrorMessage(null); }}
+            onClick={() => { setMode('login'); setErrorMessage(null); setSuccessMessage(null); }}
             style={{
               padding: '8px',
               borderRadius: '2px',
@@ -127,7 +135,7 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('register'); setErrorMessage(null); }}
+            onClick={() => { setMode('register'); setErrorMessage(null); setSuccessMessage(null); }}
             style={{
               padding: '8px',
               borderRadius: '2px',
@@ -162,6 +170,25 @@ export default function LoginPage() {
           }}>
             <Clock size={16} />
             <span><strong>7 jours d'essai gratuit</strong> sans carte bancaire. Puis 30 $/mois.</span>
+          </div>
+        )}
+
+        {/* Success message alert */}
+        {successMessage && (
+          <div style={{
+            padding: '10px 14px',
+            background: 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid #10b981',
+            borderRadius: 'var(--radius-sm)',
+            color: '#34d399',
+            fontSize: '0.78rem',
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px'
+          }}>
+            <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div>{successMessage}</div>
           </div>
         )}
 
@@ -294,43 +321,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* 1-Click Quick Login for Super-Admin */}
-        {mode === 'login' && (
-          <div style={{ marginTop: '14px' }}>
-            <button
-              type="button"
-              onClick={async () => {
-                setEmail('danielkiboko218@gmail.com');
-                setPassword('RayonsAdmin2026!');
-                setIsSubmitting(true);
-                setErrorMessage(null);
-                const res = await login('danielkiboko218@gmail.com', 'RayonsAdmin2026!');
-                if (!res.success) {
-                  setErrorMessage(res.error || 'Erreur de connexion');
-                }
-                setIsSubmitting(false);
-              }}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: 'var(--radius-sm)',
-                color: '#ffffff',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <Sparkles size={14} />
-              Connexion 1-Clic : Daniel Kiboko (Super-Admin)
-            </button>
-          </div>
-        )}
 
         {/* Security badge footer */}
         <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -339,7 +329,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Real Password Reset Modal */}
       {showForgotModal && (
         <div style={{
           position: 'fixed',
@@ -355,61 +345,231 @@ export default function LoginPage() {
           padding: '20px'
         }}>
           <div className="card" style={{ maxWidth: '440px', width: '100%', border: '1px solid #ffffff', animation: 'fadeIn 0.2s ease' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Lock size={18} />
-              Récupération de Mot de Passe
+              {forgotStep === 1 ? 'Réinitialisation du Mot de Passe' : 'Créer un Nouveau Mot de Passe'}
             </h3>
+            
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Entrez votre adresse email pour recevoir les instructions de réinitialisation.
+              {forgotStep === 1 
+                ? 'Indiquez votre adresse e-mail enregistrée pour recevoir un e-mail de réinitialisation.' 
+                : 'Saisissez le code à 6 chiffres reçu par e-mail et définissez votre nouveau mot de passe.'}
             </p>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (forgotEmail.toLowerCase().includes('danielkiboko') || forgotEmail.toLowerCase().includes('rayons.net')) {
-                setForgotResponse('Votre clé maître Super-Admin de secours est : RayonsAdmin2026! Vous pouvez également vous connecter via le bouton "Connexion 1-Clic".');
-              } else {
-                setForgotResponse('Demande enregistrée. Si votre compte existe, votre administrateur (Daniel Kiboko : danielkiboko218@gmail.com) peut réinitialiser votre mot de passe depuis le C-Panel.');
-              }
-            }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label className="label">Votre Email</label>
-                <input 
-                  type="email" 
-                  value={forgotEmail} 
-                  onChange={(e) => setForgotEmail(e.target.value)} 
-                  placeholder="nom@entreprise.com" 
-                  className="input" 
-                  required 
-                />
+            {/* Error Message Alert */}
+            {forgotError && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #ef4444',
+                borderRadius: 'var(--radius-sm)',
+                color: '#f87171',
+                fontSize: '0.8rem',
+                marginBottom: '14px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px'
+              }}>
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{forgotError}</span>
               </div>
+            )}
 
-              {forgotResponse && (
-                <div style={{
-                  padding: '10px 12px',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.78rem',
-                  lineHeight: '1.4',
-                  color: '#ffffff'
-                }}>
-                  {forgotResponse}
+            {/* Success Notice */}
+            {forgotSuccess && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10b981',
+                borderRadius: 'var(--radius-sm)',
+                color: '#34d399',
+                fontSize: '0.8rem',
+                marginBottom: '14px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px'
+              }}>
+                <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>{forgotSuccess}</span>
+              </div>
+            )}
+
+            {/* STEP 1: REQUEST CODE */}
+            {forgotStep === 1 ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setForgotError(null);
+                setForgotSuccess(null);
+
+                const clean = forgotEmail.trim().toLowerCase();
+                const exists = isEmailRegistered(clean);
+
+                if (!exists) {
+                  setForgotError("Aucun compte n'est associé à cette adresse e-mail dans la base de données.");
+                  return;
+                }
+
+                setIsForgotLoading(true);
+                try {
+                  const res = await fetch('/api/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: clean })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    setForgotSuccess(`Un e-mail contenant votre code de vérification a été envoyé à ${clean}.`);
+                    setForgotStep(2);
+                  } else {
+                    setForgotError(data.error || "Erreur lors de l'envoi de l'e-mail.");
+                  }
+                } catch (err: any) {
+                  setForgotError("Erreur réseau lors de la demande de réinitialisation.");
+                } finally {
+                  setIsForgotLoading(false);
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label className="label">Votre Adresse Email *</label>
+                  <input 
+                    type="email" 
+                    value={forgotEmail} 
+                    onChange={(e) => setForgotEmail(e.target.value)} 
+                    placeholder="nom@entreprise.com" 
+                    className="input" 
+                    required 
+                  />
                 </div>
-              )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => { setShowForgotModal(false); setForgotResponse(null); }} 
-                  className="btn btn-secondary"
-                >
-                  Fermer
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Vérifier
-                </button>
-              </div>
-            </form>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => { setShowForgotModal(false); setForgotError(null); setForgotSuccess(null); }} 
+                    className="btn btn-secondary"
+                  >
+                    Annuler
+                  </button>
+                  <button type="submit" disabled={isForgotLoading} className="btn btn-primary">
+                    {isForgotLoading ? 'Vérification...' : 'Envoyer l\'E-mail de Réinitialisation'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* STEP 2: VERIFY CODE AND SET NEW PASSWORD */
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setForgotError(null);
+
+                if (!forgotCode || forgotCode.trim().length < 4) {
+                  setForgotError('Veuillez saisir le code de vérification reçu par e-mail.');
+                  return;
+                }
+
+                if (forgotNewPass.length < 6) {
+                  setForgotError('Le mot de passe doit comporter au moins 6 caractères.');
+                  return;
+                }
+
+                if (forgotNewPass !== forgotConfirmPass) {
+                  setForgotError('Les deux mots de passe ne correspondent pas.');
+                  return;
+                }
+
+                setIsForgotLoading(true);
+                try {
+                  const clean = forgotEmail.trim().toLowerCase();
+                  const res = await fetch('/api/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      email: clean,
+                      code: forgotCode.trim(),
+                      newPassword: forgotNewPass
+                    })
+                  });
+
+                  const data = await res.json();
+                  if (data.success) {
+                    // Update stored database password
+                    updateUserPassword(clean, forgotNewPass);
+                    setEmail(clean);
+                    setPassword('');
+                    setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.');
+                    setShowForgotModal(false);
+                    setForgotStep(1);
+                    setForgotCode('');
+                    setForgotNewPass('');
+                    setForgotConfirmPass('');
+                  } else {
+                    setForgotError(data.error || 'Code invalide ou expiré.');
+                  }
+                } catch (err: any) {
+                  setForgotError('Erreur réseau lors de la mise à jour du mot de passe.');
+                } finally {
+                  setIsForgotLoading(false);
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label className="label">Code de Vérification à 6 Chiffres *</label>
+                  <input 
+                    type="text" 
+                    value={forgotCode} 
+                    onChange={(e) => setForgotCode(e.target.value)} 
+                    placeholder="Ex: 849201" 
+                    className="input" 
+                    style={{ letterSpacing: '3px', fontWeight: 700, textAlign: 'center', fontSize: '1.1rem' }}
+                    required 
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Nouveau Mot de Passe *</label>
+                  <input 
+                    type="password" 
+                    value={forgotNewPass} 
+                    onChange={(e) => setForgotNewPass(e.target.value)} 
+                    placeholder="••••••••" 
+                    className="input" 
+                    required 
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Confirmer le Nouveau Mot de Passe *</label>
+                  <input 
+                    type="password" 
+                    value={forgotConfirmPass} 
+                    onChange={(e) => setForgotConfirmPass(e.target.value)} 
+                    placeholder="••••••••" 
+                    className="input" 
+                    required 
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => { setForgotStep(1); setForgotError(null); setForgotSuccess(null); }} 
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    ← Renvoyer un code
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowForgotModal(false)} 
+                      className="btn btn-secondary"
+                    >
+                      Fermer
+                    </button>
+                    <button type="submit" disabled={isForgotLoading} className="btn btn-primary">
+                      {isForgotLoading ? 'Mise à jour...' : 'Enregistrer le Nouveau Mot de Passe'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

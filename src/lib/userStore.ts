@@ -69,50 +69,33 @@ export function findUserByEmail(email: string): User | undefined {
 
 export function verifyUserCredentials(email: string, pass: string): { success: boolean; user?: User; error?: string } {
   const clean = email.trim().toLowerCase();
-
-  // 1. Super-Admin Master Account (Daniel Kiboko)
-  if (
-    clean === 'danielkiboko218@gmail.com' ||
-    clean === 'crm@rayons.net' || 
-    clean === 'daniel.kiboko@rayons.net' || 
-    clean === 'daniel@rayons.net'
-  ) {
-    const validSuperAdminPasswords = ['RayonsAdmin2026!', 'KibokoAdmin2026!'];
-    if (validSuperAdminPasswords.includes(pass)) {
-      const superAdminUser: User = {
-        id: 'user-superadmin-daniel',
-        name: 'Daniel Kiboko',
-        email: 'danielkiboko218@gmail.com',
-        role: 'superadmin',
-        companyName: 'Rayons.net',
-        createdAt: '2026-01-01T00:00:00Z',
-        status: 'active',
-        subscriptionPlan: 'lifetime',
-        subscriptionPrice: 30,
-        subscriptionStatus: 'pro_active'
-      };
-      return { success: true, user: superAdminUser };
-    } else {
-      return { success: false, error: 'Mot de passe Super-Admin incorrect. Accès refusé.' };
-    }
-  }
-
-  // 2. Client Account Search
   const user = findUserByEmail(clean);
+
   if (!user) {
-    return { success: false, error: 'Aucun compte n\'existe avec cet e-mail. Veuillez créer un compte avec l\'essai 7 jours.' };
+    return { success: false, error: 'Aucun compte n\'existe avec cet e-mail dans la base de données. Veuillez vous inscrire via l\'essai 7 jours.' };
   }
 
   if (user.status === 'suspended') {
     return { success: false, error: 'Votre compte a été suspendu par l\'administrateur. Veuillez contacter crm@rayons.net.' };
   }
 
-  // Strict Password Verification
+  // Strict verification against database stored password
   if (!user.password || user.password !== pass) {
-    return { success: false, error: 'Mot de passe incorrect. Veuillez vérifier vos identifiants.' };
+    return { success: false, error: 'Mot de passe incorrect. Veuillez vérifier vos identifiants ou réinitialiser votre mot de passe.' };
   }
 
   return { success: true, user };
+}
+
+export function updateUserPassword(email: string, newPassword: string): boolean {
+  const clean = email.trim().toLowerCase();
+  const users = getSaasUsers();
+  const user = users.find(u => u.email.toLowerCase() === clean);
+  if (!user) return false;
+
+  user.password = newPassword;
+  saveSaasUsers(users);
+  return true;
 }
 
 export function addSaasUser(user: User): User[] {

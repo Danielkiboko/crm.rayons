@@ -18,6 +18,6 @@ echo "✅ Compilation réussie !"
 
 # 2. Déploiement sur Vercel
 echo "🌐 Envoi en ligne sur Vercel..."
-npx vercel --prod
+npx vercel --prod --name crm-rayons --yes
 
 echo "🎉 Déploiement terminé ! Votre application CRM Rayons est en ligne."
