@@ -86,10 +86,10 @@ export default function LoginPage() {
           </div>
 
           <h1 style={{ fontSize: '1.45rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '-0.02em', color: '#ffffff', marginBottom: '4px' }}>
-            LEMFLOW CRM
+            CRM RAYONS
           </h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Plateforme Outreach & Cold Email SaaS
+            Plateforme SMPP, RCS & Emailing SaaS All-in-One
           </p>
         </div>
 
@@ -272,6 +272,44 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        {/* 1-Click Quick Login for Super-Admin */}
+        {mode === 'login' && (
+          <div style={{ marginTop: '14px' }}>
+            <button
+              type="button"
+              onClick={async () => {
+                setEmail('danielkiboko218@gmail.com');
+                setPassword('RayonsAdmin2026!');
+                setIsSubmitting(true);
+                setErrorMessage(null);
+                const res = await login('danielkiboko218@gmail.com', 'RayonsAdmin2026!');
+                if (!res.success) {
+                  setErrorMessage(res.error || 'Erreur de connexion');
+                }
+                setIsSubmitting(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 'var(--radius-sm)',
+                color: '#ffffff',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <Sparkles size={14} />
+              Connexion 1-Clic : Daniel Kiboko (Super-Admin)
+            </button>
+          </div>
+        )}
 
         {/* Security badge footer */}
         <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>

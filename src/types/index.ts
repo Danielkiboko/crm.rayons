@@ -18,6 +18,8 @@ export interface User {
   trialEndsAt?: string; // ISO string 7 days from creation
   subscriptionExpiresAt?: string;
   lastLogin?: string;
+  smppCredits?: number; // Crédits SMS / SMPP disponibles
+  dailyEmailLimit?: number; // Limite journalière standard Lemlist
 }
 
 export type StepActionType = 

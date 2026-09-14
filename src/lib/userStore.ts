@@ -7,60 +7,19 @@ export const INITIAL_SAAS_USERS: User[] = [
     email: 'danielkiboko218@gmail.com',
     password: 'RayonsAdmin2026!',
     role: 'superadmin',
-    companyName: 'Rayons.net',
+    companyName: 'CRM Rayons',
     createdAt: '2026-01-01T00:00:00Z',
     status: 'active',
     subscriptionPlan: 'lifetime',
     subscriptionPrice: 30,
     subscriptionStatus: 'pro_active',
-    trialEndsAt: undefined
-  },
-  {
-    id: 'user-demo-marc',
-    name: 'Marc Fontaine',
-    email: 'marc.fontaine@techgrowth.fr',
-    password: 'Marc2026!',
-    role: 'admin',
-    companyName: 'TechGrowth Studio',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'active',
-    subscriptionPlan: 'trial',
-    subscriptionPrice: 30,
-    subscriptionStatus: 'trial_active',
-    trialEndsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'user-demo-elodie',
-    name: 'Élodie Lambert',
-    email: 'elodie@agence-scale.com',
-    password: 'Elodie2026!',
-    role: 'admin',
-    companyName: 'Agence Scale B2B',
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'active',
-    subscriptionPlan: 'pro_monthly',
-    subscriptionPrice: 30,
-    subscriptionStatus: 'pro_active',
-    trialEndsAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    subscriptionExpiresAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'user-demo-julien',
-    name: 'Julien Perrot',
-    email: 'julien@perrot-conseil.fr',
-    password: 'Julien2026!',
-    role: 'admin',
-    companyName: 'Perrot Conseil',
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'active',
-    subscriptionPlan: 'trial',
-    subscriptionPrice: 30,
-    subscriptionStatus: 'expired',
-    trialEndsAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    trialEndsAt: undefined,
+    smppCredits: 100000,
+    dailyEmailLimit: 1000
   }
 ];
 
-const SAAS_USERS_STORAGE_KEY = 'rayons_saas_crm_users_db_v2';
+const SAAS_USERS_STORAGE_KEY = 'crm_rayons_users_production_v1';
 
 export function getSaasUsers(): User[] {
   if (typeof window === 'undefined') return INITIAL_SAAS_USERS;
@@ -71,8 +30,10 @@ export function getSaasUsers(): User[] {
       return INITIAL_SAAS_USERS;
     }
     const parsed: User[] = JSON.parse(data);
-    // Ensure Super-Admin is always present and updated
-    const hasSuperAdmin = parsed.some(u => u.email.toLowerCase() === 'crm@rayons.net');
+    // Ensure Super-Admin is always present
+    const hasSuperAdmin = parsed.some(
+      u => u.email.toLowerCase() === 'danielkiboko218@gmail.com' || u.email.toLowerCase() === 'crm@rayons.net'
+    );
     if (!hasSuperAdmin) {
       const updated = [INITIAL_SAAS_USERS[0], ...parsed];
       localStorage.setItem(SAAS_USERS_STORAGE_KEY, JSON.stringify(updated));

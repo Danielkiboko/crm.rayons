@@ -5,8 +5,8 @@ import { CrmProvider } from '@/context/CrmContext';
 import AppLayout from '@/components/AppLayout';
 
 export const metadata: Metadata = {
-  title: 'LemFlow CRM - Plateforme de Prospection Multicanale & Deliverabilité',
-  description: 'CRM d\'outreach multicanal tout-en-un inspiré de Lemlist : Cold Email, Automatisation LinkedIn, Images Personnalisées, Warmup et Pipeline commercial.',
+  title: 'CRM Rayons - SMPP, RCS & Emailing SaaS All-in-One',
+  description: 'Plateforme SaaS tout-en-un : SMPP direct opérateur, RCS Google RBM, Cold Email standard Lemlist et Pipeline commercial.',
 };
 
 export default function RootLayout({
