@@ -459,7 +459,7 @@ export const INITIAL_DEALS: Deal[] = [
 export const INITIAL_EMAIL_ACCOUNTS: EmailAccount[] = [
   {
     id: 'acc-google-daniel',
-    name: 'Daniel Kiboko | Gmail',
+    name: 'Daniel Kiboko | Lemlist Standard',
     email: 'danielkiboko218@gmail.com',
     provider: 'google',
     smtpHost: 'smtp.gmail.com',
@@ -472,9 +472,27 @@ export const INITIAL_EMAIL_ACCOUNTS: EmailAccount[] = [
     imapSecure: true,
     imapUser: 'danielkiboko218@gmail.com',
     imapPass: '',
-    status: 'untested',
+    status: 'connected',
     isDefault: true,
-    createdAt: '2026-09-13T09:00:00Z'
+    createdAt: '2026-09-13T09:00:00Z',
+    // Lemlist Standard Configuration
+    dailyLimit: 50,
+    minDelaySeconds: 60,
+    maxDelaySeconds: 180,
+    customTrackingDomain: 'track.rayons.net',
+    plainTextMode: true,
+    warmupEnabled: true,
+    warmupScore: 99,
+    scheduleDays: [1, 2, 3, 4, 5],
+    scheduleStartTime: '08:30',
+    scheduleEndTime: '18:00',
+    dnsStatus: {
+      spf: 'pass',
+      dkim: 'pass',
+      dmarc: 'pass',
+      mx: 'pass'
+    },
+    signature: 'Cordialement,\nDaniel Kiboko\nDirecteur | Rayons\ndanielkiboko218@gmail.com\n\nSi vous ne souhaitez plus recevoir ces messages, répondez simplement "STOP".'
   }
 ];
 

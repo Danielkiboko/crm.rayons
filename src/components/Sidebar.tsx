@@ -17,7 +17,8 @@ import {
   LogOut,
   ShieldCheck,
   Lock,
-  Mail
+  Mail,
+  Radio
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { useAuth } from '@/context/AuthContext';
@@ -49,10 +50,16 @@ export default function Sidebar() {
       badge: 'PRO'
     },
     {
-      name: 'Comptes E-mail Pro',
+      name: 'E-mails (Lemlist Std)',
       href: '/settings/email',
       icon: Mail,
-      badge: 'SMTP'
+      badge: 'PRO'
+    },
+    {
+      name: 'Routes Télécom & RCS',
+      href: '/settings/telecom',
+      icon: Radio,
+      badge: 'DIRECT'
     },
     {
       name: 'Base Leads & Excel',

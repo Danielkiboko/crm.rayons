@@ -1,4 +1,4 @@
-export type ChannelType = 'email' | 'linkedin' | 'call' | 'task';
+export type ChannelType = 'email' | 'linkedin' | 'sms' | 'rcs' | 'call' | 'task';
 
 export type UserRole = 'superadmin' | 'admin' | 'sales' | 'viewer';
 
@@ -22,6 +22,8 @@ export interface User {
 
 export type StepActionType = 
   | 'email_send'
+  | 'sms_send'
+  | 'rcs_send'
   | 'linkedin_visit'
   | 'linkedin_connect'
   | 'linkedin_message'
@@ -39,6 +41,11 @@ export interface CampaignStep {
   delayHours: number;
   subject?: string;
   body?: string;
+  smsBody?: string;
+  rcsTitle?: string;
+  rcsBody?: string;
+  rcsMediaUrl?: string;
+  rcsSuggestions?: { type: 'reply' | 'url' | 'call'; text: string; data?: string; url?: string; phone?: string }[];
   linkedInNote?: string;
   personalizedImageUrl?: string;
   enableABTesting?: boolean;
@@ -117,7 +124,7 @@ export interface UniboxMessage {
   leadEmail: string;
   leadCompany: string;
   leadAvatar?: string;
-  channel: 'email' | 'linkedin';
+  channel: 'email' | 'linkedin' | 'sms' | 'rcs';
   direction: 'inbound' | 'outbound';
   subject?: string;
   snippet: string;
@@ -174,5 +181,38 @@ export interface EmailAccount {
   errorMessage?: string;
   isDefault: boolean;
   createdAt: string;
+  // Lemlist Standard Deliverability & Configuration
+  dailyLimit?: number; // Quota journalier d'envoi (Lemlist: 40-50 max)
+  minDelaySeconds?: number; // Délai min entre deux envois (Lemlist: 60s)
+  maxDelaySeconds?: number; // Délai max avec jitter humain (Lemlist: 180s)
+  customTrackingDomain?: string; // ex: 'track.rayons.net'
+  plainTextMode?: boolean; // Mode texte brut recommandé pour éviter l'onglet Spam/Promo
+  warmupEnabled?: boolean; // Activation de la chauffe Lemwarm
+  warmupScore?: number; // Score de santé délivrabilité 0-100%
+  signature?: string; // Signature avec mention anti-spam légale
+  scheduleDays?: number[]; // [1, 2, 3, 4, 5] (Lundi à Vendredi)
+  scheduleStartTime?: string; // '08:30'
+  scheduleEndTime?: string; // '18:00'
+  dnsStatus?: {
+    spf: 'pass' | 'warning' | 'fail';
+    dkim: 'pass' | 'warning' | 'fail';
+    dmarc: 'pass' | 'warning' | 'fail';
+    mx: 'pass' | 'fail';
+  };
 }
 
+export interface TelecomRouteConfig {
+  id: string;
+  name: string; // ex: 'Orange Direct SMSC', 'Vodacom Telecom Gateway', 'Google RBM Cloud'
+  channel: 'sms' | 'rcs';
+  endpointUrl: string;
+  authType: 'bearer' | 'basic' | 'apiKey' | 'header';
+  apiToken?: string;
+  apiSecret?: string;
+  senderId: string; // ex: 'RAYONS', 'LEMFLOW'
+  rcsBotId?: string; // ex: 'rayons-bot@rbm.goog'
+  status: 'active' | 'testing' | 'inactive';
+  tpsLimit?: number; // Débit max en messages/seconde
+  webhookUrl?: string;
+  createdAt: string;
+}

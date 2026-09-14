@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Dynamic variable interpolation
+    // Dynamic variable interpolation with Lemlist standards (e.g. {{firstName | default: 'Bonjour'}})
     const replaceVariables = (template: string) => {
       if (!template) return '';
       let result = template;
@@ -33,20 +33,39 @@ export async function POST(req: NextRequest) {
         company: leadVariables?.company || 'votre entreprise',
         jobTitle: leadVariables?.jobTitle || 'Décideur',
         email: toEmail,
+        icebreaker: leadVariables?.customVariables?.icebreaker || leadVariables?.icebreaker || 'J\'ai suivi avec attention vos dernières actualités.',
+        unsubscribe: '<a href="#unsubscribe" style="color: #888; font-size: 11px; text-decoration: underline;">Se désinscrire</a>',
         ...(leadVariables?.customVariables || {})
       };
 
+      // Handle simple variables {{key}}
       Object.entries(vars).forEach(([key, val]) => {
         const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'gi');
         result = result.replace(regex, val || '');
+      });
+
+      // Handle Lemlist fallback syntax: {{variable | default: 'fallback text'}} or {{variable | fallback: 'text'}}
+      result = result.replace(/{{\s*([a-zA-Z0-9_]+)\s*\|\s*(?:default|fallback):\s*['"]([^'"]+)['"]\s*}}/gi, (_, varName, fallback) => {
+        return vars[varName] && vars[varName].trim() !== '' ? vars[varName] : fallback;
       });
 
       return result;
     };
 
     const finalSubject = replaceVariables(subject || 'Opportunité de collaboration');
-    const finalHtml = replaceVariables(htmlBody || textBody || '');
-    const finalText = replaceVariables(textBody || '');
+    let finalHtml = replaceVariables(htmlBody || textBody || '');
+    let finalText = replaceVariables(textBody || '');
+
+    // Lemlist unsubscribe footer standard
+    const unsubscribeFooterText = '\n\n---\nSi vous préférez ne plus recevoir nos échanges, répondez simplement "STOP".';
+    const unsubscribeFooterHtml = '<br/><br/><div style="font-size: 11px; color: #888888; border-top: 1px solid #eeeeee; padding-top: 12px; margin-top: 24px;">Si vous préférez ne plus recevoir nos échanges, répondez simplement <strong>STOP</strong> ou <a href="#unsubscribe" style="color: #666; text-decoration: underline;">cliquez ici pour vous désabonner</a>.</div>';
+
+    if (!finalText.includes('STOP') && !finalText.includes('désinscr')) {
+      finalText += unsubscribeFooterText;
+    }
+    if (!finalHtml.includes('STOP') && !finalHtml.includes('désinscr')) {
+      finalHtml += unsubscribeFooterHtml;
+    }
 
     // If SMTP credentials are provided, send via real SMTP
     if (smtpConfig && smtpConfig.smtpHost && smtpConfig.smtpUser && smtpConfig.smtpPass) {
@@ -62,17 +81,18 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      const senderAddress = `"${fromName || 'Rayons CRM'}" <${fromEmail || smtpConfig.smtpUser}>`;
+      const senderAddress = `"${fromName || 'Daniel Kiboko'}" <${fromEmail || smtpConfig.smtpUser}>`;
 
       const info = await transporter.sendMail({
         from: senderAddress,
         to: `"${toName || ''}" <${toEmail}>`,
         subject: finalSubject,
         text: finalText,
-        html: finalHtml.includes('<') ? finalHtml : `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #222;">${finalHtml.replace(/\n/g, '<br/>')}</div>`,
+        html: finalHtml.includes('<') ? finalHtml : `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6; color: #222;">${finalHtml.replace(/\n/g, '<br/>')}</div>`,
         headers: {
-          'X-Mailer': 'Rayons-Outreach-Engine',
-          'X-Entity-Ref-ID': `camp-${Date.now()}`
+          'X-Mailer': 'LemFlow-Lemlist-Standard-Engine',
+          'X-Entity-Ref-ID': `camp-${Date.now()}`,
+          'List-Unsubscribe': `<mailto:${fromEmail || smtpConfig.smtpUser}?subject=unsubscribe>`
         }
       });
 
