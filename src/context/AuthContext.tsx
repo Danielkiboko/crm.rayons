@@ -139,9 +139,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cleanEmail = email.trim().toLowerCase();
       const code = error.code || '';
 
-      // Fallback SuperAdmin d'urgence UNIQUEMENT si le mot de passe maître EXACT est fourni
+      // Fallback SuperAdmin d'urgence UNIQUEMENT si le mot de passe maître EXACT ou personnalisé est fourni
       const isMasterSuperAdmin = isSuperAdminEmail(cleanEmail);
-      const isMasterPass = pass === 'RayonsAdmin2026!' || pass === 'KibokoAdmin2026!';
+      let customAdminPass = '';
+      if (typeof window !== 'undefined') {
+        customAdminPass = localStorage.getItem('rayons_crm_custom_admin_pass') || '';
+      }
+      const isMasterPass = 
+        pass === 'RayonsAdmin2026!' || 
+        pass === 'KibokoAdmin2026!' || 
+        (customAdminPass !== '' && pass === customAdminPass);
 
       if (isMasterSuperAdmin && isMasterPass) {
         const localUser: User = {

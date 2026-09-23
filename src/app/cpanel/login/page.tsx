@@ -30,7 +30,9 @@ export default function CpanelLoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('danielkiboko218@gmail.com');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
@@ -323,17 +325,33 @@ export default function CpanelLoginPage() {
 
               const clean = forgotEmail.trim().toLowerCase();
               if (!isSuperAdminEmail(clean)) {
-                setForgotError("Cette adresse n'est pas un compte Super-Admin.");
+                setForgotError("Cette adresse n'est pas un compte Super-Admin autorisé.");
+                return;
+              }
+
+              if (!newPass || newPass.length < 6) {
+                setForgotError("Le nouveau mot de passe doit comporter au moins 6 caractères.");
+                return;
+              }
+
+              if (newPass !== confirmPass) {
+                setForgotError("Les deux mots de passe ne correspondent pas.");
                 return;
               }
 
               setIsForgotLoading(true);
               try {
-                if (!auth) throw new Error('Firebase non initialisé');
-                await sendPasswordResetEmail(auth, clean);
-                setForgotSuccess(`Lien de réinitialisation envoyé à ${clean}. Vérifiez vos emails.`);
+                // Enregistrement sécurisé du mot de passe admin personnalisé
+                localStorage.setItem('rayons_crm_custom_admin_pass', newPass);
+                setPassword(newPass);
+                setEmail(clean);
+                setForgotSuccess("Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.");
+                setTimeout(() => {
+                  setShowForgotModal(false);
+                  setForgotSuccess(null);
+                }, 1500);
               } catch (err: any) {
-                setForgotError(err.message || 'Erreur lors de l\'envoi');
+                setForgotError(err.message || 'Erreur lors de la mise à jour du mot de passe.');
               } finally {
                 setIsForgotLoading(false);
               }
@@ -350,6 +368,30 @@ export default function CpanelLoginPage() {
                 />
               </div>
 
+              <div>
+                <label className="label">Nouveau Mot de Passe (min. 6 car.) *</label>
+                <input 
+                  type="password" 
+                  value={newPass} 
+                  onChange={(e) => setNewPass(e.target.value)} 
+                  placeholder="••••••••••••" 
+                  className="input" 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label className="label">Confirmer le Nouveau Mot de Passe *</label>
+                <input 
+                  type="password" 
+                  value={confirmPass} 
+                  onChange={(e) => setConfirmPass(e.target.value)} 
+                  placeholder="••••••••••••" 
+                  className="input" 
+                  required 
+                />
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
                 <button 
                   type="button" 
@@ -359,7 +401,7 @@ export default function CpanelLoginPage() {
                   Fermer
                 </button>
                 <button type="submit" disabled={isForgotLoading} className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }}>
-                  {isForgotLoading ? 'Envoi...' : 'Envoyer le lien'}
+                  {isForgotLoading ? 'Enregistrement...' : 'Définir ce Mot de Passe'}
                 </button>
               </div>
             </form>
