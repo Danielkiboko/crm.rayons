@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, CampaignStep, EmailAccount } from '@/types';
+import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, CampaignStep, EmailAccount, LinkedinAccount } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { 
   INITIAL_CAMPAIGNS, 
@@ -31,6 +31,9 @@ interface CrmContextType {
   warmupConfig: WarmupConfig;
   imageTemplates: ImageTemplate[];
   emailAccounts: EmailAccount[];
+  linkedinAccount: LinkedinAccount | null;
+  setLinkedinAccount: (account: LinkedinAccount | null) => void;
+  purgeAllFictitiousData: () => void;
   
   // Email Accounts
   addEmailAccount: (account: Omit<EmailAccount, 'id' | 'createdAt'>) => EmailAccount;
@@ -38,6 +41,7 @@ interface CrmContextType {
   deleteEmailAccount: (id: string) => void;
   setDefaultEmailAccount: (id: string) => void;
   testEmailAccount: (id: string) => Promise<{ success: boolean; message: string }>;
+
 
   // Live Outreach & Sending
   sendCampaignEmailLive: (campaignId: string, leadId: string, customSubject?: string, customBody?: string) => Promise<{ success: boolean; error?: string }>;
@@ -91,6 +95,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const [warmupConfig, setWarmupConfig] = useState<WarmupConfig>(INITIAL_WARMUP_CONFIG);
   const [imageTemplates] = useState<ImageTemplate[]>(INITIAL_IMAGE_TEMPLATES);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [linkedinAccount, setLinkedinAccount] = useState<LinkedinAccount | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Scoped storage key per user tenant to prevent data collisions & amalgamations
@@ -99,7 +104,30 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     return `rayons_crm_tenant_${uid}_${type}`;
   };
 
-  // Load tenant-isolated data when user changes
+  // Purge any fictitious/mock items from browser localStorage and state
+  const purgeAllFictitiousData = () => {
+    if (!user?.id) return;
+    setCampaigns([]);
+    setLeads([]);
+    setMessages([]);
+    setDeals([]);
+    setEmailAccounts(prev => prev.filter(a => a.id !== 'acc-placeholder-default' && a.email !== 'votremail@votredomaine.com'));
+    setWarmupConfig(INITIAL_WARMUP_CONFIG);
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(getTenantKey('campaigns', user.id));
+      localStorage.removeItem(getTenantKey('leads', user.id));
+      localStorage.removeItem(getTenantKey('unibox', user.id));
+      localStorage.removeItem(getTenantKey('deals', user.id));
+      localStorage.removeItem('lemlist_crm_campaigns');
+      localStorage.removeItem('lemlist_crm_leads');
+      localStorage.removeItem('lemlist_crm_unibox');
+      localStorage.removeItem('lemlist_crm_deals');
+      localStorage.removeItem('lemlist_crm_email_accounts');
+    }
+  };
+
+  // Load tenant-isolated data when user changes - STRICT PRODUCTION (no demo dummy items)
   useEffect(() => {
     if (!user) {
       setCampaigns([]);
@@ -107,32 +135,86 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       setMessages([]);
       setDeals([]);
       setEmailAccounts([]);
+      setLinkedinAccount(null);
       setIsLoaded(false);
       return;
     }
 
-    const isSuper = user.role === 'superadmin' || user.email === 'danielkiboko218@gmail.com' || user.email === 'crm@rayons.net';
-    
-    // Super-Admin gets initial demo set if storage empty; Clients start fresh with clean slate
-    setCampaigns(getStoredData(getTenantKey('campaigns', user.id), isSuper ? INITIAL_CAMPAIGNS : []));
-    setLeads(getStoredData(getTenantKey('leads', user.id), isSuper ? INITIAL_LEADS : []));
-    setMessages(getStoredData(getTenantKey('unibox', user.id), isSuper ? INITIAL_UNIBOX_MESSAGES : []));
-    setDeals(getStoredData(getTenantKey('deals', user.id), isSuper ? INITIAL_DEALS : []));
-    setWarmupConfig(getStoredData(getTenantKey('warmup', user.id), INITIAL_WARMUP_CONFIG));
-    setEmailAccounts(getStoredData(getTenantKey('email_accounts', user.id), isSuper ? INITIAL_EMAIL_ACCOUNTS : []));
+    const dummyLeadEmails = [
+      'thomas.moreau@doctolib.fr',
+      'sophie.dubois@alan.com',
+      'alexandre@swile.co',
+      'camille.l@payfit.com',
+      'marc.vidal@qonto.com',
+      'elodie@spendesk.com',
+      'j.rousseau@algolia.com',
+      'ngarnier@mirakl.com'
+    ];
+
+    const rawCampaigns = getStoredData<Campaign[]>(getTenantKey('campaigns', user.id), []);
+    const rawLeads = getStoredData<Lead[]>(getTenantKey('leads', user.id), []);
+    const rawMessages = getStoredData<UniboxMessage[]>(getTenantKey('unibox', user.id), []);
+    const rawDeals = getStoredData<Deal[]>(getTenantKey('deals', user.id), []);
+    const rawWarmup = getStoredData<WarmupConfig>(getTenantKey('warmup', user.id), INITIAL_WARMUP_CONFIG);
+    const rawEmailAccounts = getStoredData<EmailAccount[]>(getTenantKey('email_accounts', user.id), []);
+    const rawLinkedin = getStoredData<LinkedinAccount | null>(getTenantKey('linkedin_account', user.id), null);
+
+    // Thorough filter: eliminate any previously cached mock / demo data
+    const cleanLeads = (rawLeads || []).filter(l => 
+      !l.id.startsWith('lead-') && 
+      !dummyLeadEmails.includes(l.email?.toLowerCase())
+    );
+
+    const cleanCampaigns = (rawCampaigns || []).filter(c => 
+      c.id !== 'camp-1' && c.id !== 'camp-2' && c.id !== 'camp-3' &&
+      !c.name.includes('SaaS Outbound Multicanal') &&
+      !c.name.includes('Partenariats Stratégiques')
+    );
+
+    const cleanMessages = (rawMessages || []).filter(m => 
+      !m.id.startsWith('msg-') && 
+      !m.id.startsWith('reply-') && 
+      m.leadEmail !== 'claire.martin@lemlist.com'
+    );
+
+    const cleanDeals = (rawDeals || []).filter(d => 
+      !d.id.startsWith('deal-') && 
+      !['Doctolib', 'Alan', 'Spendesk', 'PayFit'].includes(d.company)
+    );
+
+    const cleanEmailAccounts = (rawEmailAccounts || []).filter(a => 
+      a.id !== 'acc-placeholder-default' && 
+      a.email !== 'votremail@votredomaine.com'
+    );
+
+    setCampaigns(cleanCampaigns);
+    setLeads(cleanLeads);
+    setMessages(cleanMessages);
+    setDeals(cleanDeals);
+    setWarmupConfig(rawWarmup);
+    setEmailAccounts(cleanEmailAccounts);
+    setLinkedinAccount(rawLinkedin);
     setIsLoaded(true);
 
     // Asynchronously fetch latest data from Cloud Firestore
     const uid = user.id;
     fetchLeadsFromFirestore(uid).then(cloudLeads => {
       if (cloudLeads && cloudLeads.length > 0) {
-        setLeads(cloudLeads);
+        const cleanCloudLeads = cloudLeads.filter(l => 
+          !l.id.startsWith('lead-') && 
+          !dummyLeadEmails.includes(l.email?.toLowerCase())
+        );
+        setLeads(cleanCloudLeads);
       }
     }).catch(() => {});
 
     fetchCampaignsFromFirestore(uid).then(cloudCampaigns => {
       if (cloudCampaigns && cloudCampaigns.length > 0) {
-        setCampaigns(cloudCampaigns);
+        const cleanCloudCampaigns = cloudCampaigns.filter(c => 
+          c.id !== 'camp-1' && c.id !== 'camp-2' && c.id !== 'camp-3' &&
+          !c.name.includes('SaaS Outbound Multicanal')
+        );
+        setCampaigns(cleanCloudCampaigns);
       }
     }).catch(() => {});
   }, [user?.id]);
@@ -175,6 +257,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       setStoredData(getTenantKey('email_accounts', user.id), emailAccounts);
     }
   }, [emailAccounts, isLoaded, user?.id]);
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      setStoredData(getTenantKey('linkedin_account', user.id), linkedinAccount);
+    }
+  }, [linkedinAccount, isLoaded, user?.id]);
 
   // Campaign methods
   const createCampaign = (campaignData: Omit<Campaign, 'id' | 'createdAt' | 'sentCount' | 'openedCount' | 'clickedCount' | 'repliedCount' | 'interestedCount' | 'bounceCount'>) => {
@@ -679,6 +767,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const syncInboxReplies = async (): Promise<{ success: boolean; newCount: number }> => {
     const defaultAcc = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
+    if (!defaultAcc) {
+      return { success: true, newCount: 0 };
+    }
     try {
       const res = await fetch('/api/email/sync', {
         method: 'POST',
@@ -687,13 +778,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       });
 
       const data = await res.json();
-      if (data.success && data.mockReply) {
-        // Add new reply to messages if not already there
-        const alreadyExists = messages.some(m => m.leadEmail === data.mockReply.leadEmail && m.subject === data.mockReply.subject);
-        if (!alreadyExists) {
-          setMessages(prev => [data.mockReply, ...prev]);
-          return { success: true, newCount: 1 };
-        }
+      if (data.success && data.replies && Array.isArray(data.replies) && data.replies.length > 0) {
+        setMessages(prev => [...data.replies, ...prev]);
+        return { success: true, newCount: data.replies.length };
       }
       return { success: true, newCount: 0 };
     } catch (e) {
@@ -711,6 +798,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         warmupConfig,
         imageTemplates,
         emailAccounts,
+        linkedinAccount,
+        setLinkedinAccount,
+        purgeAllFictitiousData,
         addEmailAccount,
         updateEmailAccount,
         deleteEmailAccount,

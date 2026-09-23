@@ -238,3 +238,18 @@ export interface TelecomRouteConfig {
   webhookUrl?: string;
   createdAt: string;
 }
+
+export interface LinkedinAccount {
+  id: string;
+  name: string;
+  headline?: string;
+  avatarUrl?: string;
+  profileUrl: string;
+  email?: string;
+  cookieLiAt?: string;
+  connectedAt: string;
+  dailyLimit: number;
+  status: 'connected' | 'disconnected' | 'untested';
+  connectMethod: 'oneclick' | 'credentials' | 'cookie';
+}
+

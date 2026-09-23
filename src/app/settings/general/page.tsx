@@ -25,9 +25,11 @@ import {
   Lock,
   Layers,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useCrm } from '@/context/CrmContext';
 import { getSaasPricing, DEFAULT_SAAS_PRICING } from '@/lib/userStore';
 
 // ── Types locaux ──────────────────────────────────────────────
@@ -73,6 +75,7 @@ export default function GeneralSettingsPage() {
   const [activeTab, setActiveTab] = useState<'general' | 'subscription' | 'schedule' | 'notifications' | 'security'>('general');
   const [saved, setSaved] = useState(false);
   const { user, trialStatus } = useAuth();
+  const { purgeAllFictitiousData } = useCrm();
   const [pricing, setPricing] = useState(DEFAULT_SAAS_PRICING);
 
   React.useEffect(() => {
@@ -660,6 +663,34 @@ export default function GeneralSettingsPage() {
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-subtle)', marginTop: '4px' }}>{sub} · {unit}</div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Environnement & Données Réelles */}
+          <div className="card" style={{ border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.02)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Trash2 size={16} color="#f87171" />
+                  Mode Production & Nettoyage du Cache
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px', maxWidth: '600px', lineHeight: '1.4' }}>
+                  Si vous avez des prospects, campagnes ou messages de test en mémoire dans votre navigateur, vous pouvez purger le cache local en 1 clic pour repartir sur un CRM vierge prêt pour la production.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Êtes-vous sûr de vouloir vider toutes les données fictives et réinitialiser à zéro ? Vos vrais comptes email et LinkedIn connectés seront conservés.')) {
+                    purgeAllFictitiousData();
+                    alert('Données de test purgées avec succès. Le CRM est à zéro.');
+                  }
+                }}
+                className="btn btn-secondary"
+                style={{ color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.4)', whiteSpace: 'nowrap' }}
+              >
+                Purger les données de test
+              </button>
             </div>
           </div>
         </div>

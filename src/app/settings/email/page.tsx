@@ -47,12 +47,12 @@ export default function EmailAccountsPage() {
 
   // New Account Form State
   const [provider, setProvider] = useState<'hostinger' | 'google' | 'microsoft' | 'custom'>('google');
-  const [name, setName] = useState('Daniel Kiboko | Lemlist Standard');
-  const [email, setEmail] = useState('danielkiboko218@gmail.com');
+  const [name, setName] = useState('Daniel Kiboko');
+  const [email, setEmail] = useState('');
   const [smtpHost, setSmtpHost] = useState('smtp.gmail.com');
   const [smtpPort, setSmtpPort] = useState(465);
   const [smtpSecure, setSmtpSecure] = useState(true);
-  const [smtpUser, setSmtpUser] = useState('danielkiboko218@gmail.com');
+  const [smtpUser, setSmtpUser] = useState('');
   const [smtpPass, setSmtpPass] = useState('');
   const [imapHost, setImapHost] = useState('imap.gmail.com');
   const [imapPort, setImapPort] = useState(993);
@@ -452,6 +452,21 @@ export default function EmailAccountsPage() {
 
           {/* Accounts List Cards */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {emailAccounts.length === 0 && !isAddingNew && (
+              <div className="card" style={{ textAlign: 'center', padding: '48px 24px', border: '1px dashed var(--border-strong)' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <Mail size={24} />
+                </div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '6px' }}>Aucune boîte e-mail connectée</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '480px', margin: '0 auto 20px', lineHeight: '1.5' }}>
+                  Connectez votre véritable boîte d'envoi (Google Workspace / Gmail, Microsoft 365, Hostinger Mail ou SMTP personnalisé) pour envoyer vos campagnes d'outreach et synchroniser vos réponses dans l'Unibox.
+                </p>
+                <button onClick={() => setIsAddingNew(true)} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  <Plus size={16} /> Connecter ma première boîte e-mail
+                </button>
+              </div>
+            )}
+
             {emailAccounts.map((account) => {
               const isTesting = testingAccountId === account.id;
               const notice = testNotice?.id === account.id ? testNotice : null;
