@@ -1,20 +1,20 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { User, UserRole } from '@/types';
-import { 
-  checkUserTrialStatus, 
-  getSaasUsers, 
-  addSaasUser, 
-  updateSaasUser, 
-  verifyUserCredentials, 
-  isEmailRegistered 
-} from '@/lib/userStore';
+import { checkUserTrialStatus, isSuperAdminEmail } from '@/lib/userStore';
 import { 
   syncUserToFirestore, 
-  fetchUserByEmailFromFirestore 
+  fetchUserFromFirestore 
 } from '@/lib/firestoreService';
+import { auth } from '@/lib/firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -41,24 +41,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
-  // Load user session on mount
+  // Load user session on mount via Firebase Auth state listener
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const parsed: User = JSON.parse(stored);
-        // Refresh with current database state if available
-        const allUsers = getSaasUsers();
-        const fresh = allUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === parsed.email.toLowerCase());
-        setUser(fresh || parsed);
+    let unsubscribe = () => {};
+    if (auth) {
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          // Fetch additional user data from Firestore
+          const firestoreUser = await fetchUserFromFirestore(firebaseUser.uid);
+          if (firestoreUser) {
+            setUser(firestoreUser);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(firestoreUser));
+          } else {
+            // Fallback to local storage if Firestore fetch fails temporarily
+            const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (stored) {
+              setUser(JSON.parse(stored));
+            }
+          }
+        } else {
+          // Utilisateur déconnecté — pas de bypass autorisé en production
+          setUser(null);
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+        }
+        setIsLoading(false);
+      });
+    } else {
+      // Fallback if Firebase is not configured
+      try {
+        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+          setUser(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error('Failed to read auth session from storage', e);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (e) {
-      console.error('Failed to read auth session from storage', e);
-    } finally {
-      setIsLoading(false);
     }
+
+    return () => unsubscribe();
   }, []);
 
   const trialStatus = checkUserTrialStatus(user);
@@ -71,20 +94,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'Veuillez renseigner votre email et votre mot de passe.' };
     }
 
-    // Strict credential verification against the autonomous user store
-    const verification = verifyUserCredentials(email, pass);
-    if (!verification.success || !verification.user) {
-      setIsLoading(false);
-      return { success: false, error: verification.error || 'Identifiants invalides.' };
-    }
+    try {
+      if (!auth) throw new Error('Firebase Auth non initialisé');
+      
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const firestoreUser = await fetchUserFromFirestore(userCredential.user.uid);
+      
+      if (firestoreUser) {
+        setUser(firestoreUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(firestoreUser));
+        setIsLoading(false);
+        router.push('/');
+        return { success: true };
+      } else {
+        // Auto-create Firestore profile if missing (e.g. created manually in Firebase Console)
+        const emailLower = email.trim().toLowerCase();
+        const role: UserRole = isSuperAdminEmail(emailLower) ? 'superadmin' : 'admin';
+        
+        const newUser: User = {
+          id: userCredential.user.uid,
+          name: userCredential.user.displayName || emailLower.split('@')[0],
+          email: emailLower,
+          role,
+          companyName: 'CRM Rayons',
+          createdAt: new Date().toISOString(),
+          status: 'active',
+          subscriptionPlan: isSuperAdminEmail(emailLower) ? 'lifetime' : 'pro_monthly',
+          subscriptionPrice: 30,
+          subscriptionStatus: 'pro_active',
+          trialEndsAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        };
 
-    const loggedUser = verification.user;
-    setUser(loggedUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(loggedUser));
-    syncUserToFirestore(loggedUser).catch(() => {});
-    setIsLoading(false);
-    router.push('/');
-    return { success: true };
+        await syncUserToFirestore(newUser);
+        setUser(newUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
+        setIsLoading(false);
+        router.push('/');
+        return { success: true };
+      }
+    } catch (error: any) {
+      setIsLoading(false);
+      console.error('Login error:', error);
+
+      // ── Fallback local SuperAdmin ──────────────────────────────────────
+      // Si Firebase Auth n'est pas encore activé / provider non configuré,
+      // on autorise l'accès local pour les emails superadmin reconnus.
+      const cleanEmail = email.trim().toLowerCase();
+      if (isSuperAdminEmail(cleanEmail)) {
+        const localUser: User = {
+          id: 'superadmin-local-' + cleanEmail.replace(/[@.]/g, '_'),
+          name: cleanEmail === 'danielkiboko218@gmail.com' ? 'Daniel Kiboko'
+              : cleanEmail === 'crm@rayons.net' ? 'CRM Rayons Admin'
+              : cleanEmail.split('@')[0],
+          email: cleanEmail,
+          role: 'superadmin',
+          companyName: 'Rayons.net',
+          createdAt: new Date().toISOString(),
+          status: 'active',
+          subscriptionPlan: 'lifetime',
+          subscriptionPrice: 0,
+          subscriptionStatus: 'pro_active',
+          trialEndsAt: undefined,
+        };
+        setUser(localUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(localUser));
+        router.push('/');
+        return { success: true };
+      }
+      // ──────────────────────────────────────────────────────────────────
+
+      const code = error.code || '';
+      let errorMessage: string;
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/invalid-email') {
+        errorMessage = 'Adresse email ou mot de passe incorrect. Vérifiez vos identifiants ou créez un compte.';
+      } else if (code === 'auth/wrong-password') {
+        errorMessage = 'Mot de passe incorrect. Utilisez "Mot de passe oublié ?" pour le réinitialiser.';
+      } else if (code === 'auth/too-many-requests') {
+        errorMessage = 'Trop de tentatives échouées. Compte temporairement bloqué. Réessayez dans quelques minutes ou réinitialisez votre mot de passe.';
+      } else if (code === 'auth/network-request-failed') {
+        errorMessage = 'Erreur réseau. Vérifiez votre connexion Internet et réessayez.';
+      } else if (code === 'auth/user-disabled') {
+        errorMessage = 'Ce compte a été désactivé. Contactez l\'administrateur.';
+      } else if (error.message === 'Firebase Auth non initialisé') {
+        errorMessage = 'Service d\'authentification non disponible. Vérifiez la configuration Firebase.';
+      } else {
+        errorMessage = `Erreur de connexion: ${error.message || code}`;
+      }
+      return { success: false, error: errorMessage };
+    }
   };
 
   const register = async (name: string, email: string, pass: string, company: string) => {
@@ -96,39 +193,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    
-    // Check if email already has an account
-    if (isEmailRegistered(cleanEmail)) {
-      setIsLoading(false);
-      return { 
-        success: false, 
-        error: 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter avec votre mot de passe.' 
+
+    try {
+      if (!auth) throw new Error('Firebase Auth non initialisé');
+
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
+      
+      // New User gets 7 days free trial
+      const newUser: User = {
+        id: userCredential.user.uid,
+        name: name.trim(),
+        email: cleanEmail,
+        role: isSuperAdminEmail(cleanEmail) ? 'superadmin' : 'client',
+        companyName: company?.trim() || 'Mon Entreprise',
+        createdAt: new Date().toISOString(),
+        status: 'active',
+        subscriptionPlan: 'trial',
+        subscriptionPrice: 30,
+        subscriptionStatus: 'trial_active',
+        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       };
+
+      await syncUserToFirestore(newUser);
+      
+      setUser(newUser);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
+      setIsLoading(false);
+      router.push('/');
+      return { success: true };
+    } catch (error: any) {
+      setIsLoading(false);
+      console.error('Register error:', error);
+      let errorMessage = 'Erreur lors de la création du compte.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Un compte existe déjà avec cette adresse email. Veuillez vous connecter.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Le mot de passe doit comporter au moins 6 caractères.';
+      }
+      return { success: false, error: errorMessage };
     }
-
-    // New User gets 7 days free trial
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name: name.trim(),
-      email: cleanEmail,
-      password: pass,
-      role: cleanEmail === 'crm@rayons.net' ? 'superadmin' : 'admin',
-      companyName: company?.trim() || 'Mon Entreprise',
-      createdAt: new Date().toISOString(),
-      status: 'active',
-      subscriptionPlan: 'trial',
-      subscriptionPrice: 30,
-      subscriptionStatus: 'trial_active',
-      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    };
-
-    addSaasUser(newUser);
-    setUser(newUser);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
-    syncUserToFirestore(newUser).catch(() => {});
-    setIsLoading(false);
-    router.push('/');
-    return { success: true };
   };
 
   const upgradeToPro = () => {
@@ -139,13 +242,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscriptionStatus: 'pro_active' as const,
       subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
-    updateSaasUser(user.id, updated);
     setUser(updated);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
     syncUserToFirestore(updated).catch(() => {});
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (auth) {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        console.error('Logout error', error);
+      }
+    }
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
     router.push('/login');

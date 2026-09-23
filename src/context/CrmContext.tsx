@@ -21,6 +21,7 @@ import {
   syncCampaignsToFirestore, 
   fetchCampaignsFromFirestore 
 } from '@/lib/firestoreService';
+import { deduplicateAndCleanLeads, DeduplicationOptions, DeduplicationResult } from '@/lib/phoneUtils';
 
 interface CrmContextType {
   campaigns: Campaign[];
@@ -55,12 +56,14 @@ interface CrmContextType {
 
   // Lead actions
   addLead: (lead: Omit<Lead, 'id' | 'createdAt' | 'status' | 'emailVerified' | 'score'>) => Lead;
-  importLeads: (newLeads: Partial<Lead>[]) => number;
+  importLeads: (newLeads: Partial<Lead>[], options?: DeduplicationOptions) => number;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   deleteLead: (id: string) => void;
   verifyLeadEmail: (id: string) => Promise<void>;
   verifyAllLeads: () => Promise<{ verified: number; valid: number; risky: number; invalid: number }>;
   removeInvalidLeads: () => number;
+  generateIcebreakers: (leadIds: string[]) => Promise<void>;
+  cleanAndDeduplicateAllLeads: (options?: DeduplicationOptions) => DeduplicationResult<Lead>;
 
   // Unibox actions
   markMessageRead: (messageId: string) => void;
@@ -306,19 +309,28 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     return newLead;
   };
 
-  const importLeads = (newLeadsData: Partial<Lead>[]) => {
-    const created: Lead[] = newLeadsData.map((data, index) => ({
+  const importLeads = (newLeadsData: Partial<Lead>[], options?: DeduplicationOptions) => {
+    // Nettoyage E.164 & déduplication automatique
+    const report = deduplicateAndCleanLeads(newLeadsData, leads, {
+      checkPhone: true,
+      checkEmail: true,
+      normalizePhones: true,
+      defaultCountryCode: '243',
+      ...options
+    });
+
+    const created: Lead[] = report.uniqueLeads.map((data, index) => ({
       id: `lead-import-${Date.now()}-${index}`,
       firstName: data.firstName || 'Contact',
       lastName: data.lastName || '',
-      email: data.email || `contact${index}@example.com`,
+      email: data.email || (data.phone ? `${data.phone.replace(/\D/g, '')}@sms.lead` : `contact${index}@example.com`),
       company: data.company || 'Entreprise',
       jobTitle: data.jobTitle || 'Décideur',
       linkedinUrl: data.linkedinUrl || '',
       phone: data.phone || '',
       website: data.website || '',
       status: 'new',
-      tags: data.tags && data.tags.length ? data.tags : ['Import CSV'],
+      tags: data.tags && data.tags.length ? data.tags : ['Import'],
       createdAt: new Date().toISOString(),
       emailVerified: true,
       score: Math.floor(Math.random() * 25) + 75
@@ -326,6 +338,20 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
     setLeads(prev => [...created, ...prev]);
     return created.length;
+  };
+
+  const cleanAndDeduplicateAllLeads = (options?: DeduplicationOptions): DeduplicationResult<Lead> => {
+    // Dédupliquer et normaliser l'ensemble des prospects existants
+    const report = deduplicateAndCleanLeads(leads, [], {
+      checkPhone: true,
+      checkEmail: true,
+      normalizePhones: true,
+      defaultCountryCode: '243',
+      ...options
+    });
+
+    setLeads(report.uniqueLeads as Lead[]);
+    return report as DeduplicationResult<Lead>;
   };
 
   const updateLead = (id: string, updates: Partial<Lead>) => {
@@ -389,6 +415,20 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     const removedCount = leads.length - toKeep.length;
     setLeads(toKeep);
     return removedCount;
+  };
+
+  const generateIcebreakers = async (leadIds: string[]) => {
+    // Simulate AI generation delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    setLeads(prev => prev.map(lead => {
+      if (leadIds.includes(lead.id) && !lead.icebreaker) {
+        // Simple heuristic generation based on lead data
+        const icebreaker = `Bonjour ${lead.firstName}, j'ai vu votre impressionnant parcours chez ${lead.company}. En tant que ${lead.jobTitle}, vous devez être confronté à des défis intéressants !`;
+        return { ...lead, icebreaker };
+      }
+      return lead;
+    }));
   };
 
   // Unibox methods
@@ -694,6 +734,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         verifyLeadEmail,
         verifyAllLeads,
         removeInvalidLeads,
+        generateIcebreakers,
+        cleanAndDeduplicateAllLeads,
         markMessageRead,
         sendReply,
         changeMessageSentiment,

@@ -17,7 +17,8 @@ import {
   Clock
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { isEmailRegistered, updateUserPassword } from '@/lib/userStore';
+import { auth } from '@/lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 export default function LoginPage() {
   const { login, register } = useAuth();
@@ -32,11 +33,7 @@ export default function LoginPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
   const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotCode, setForgotCode] = useState('');
-  const [forgotNewPass, setForgotNewPass] = useState('');
-  const [forgotConfirmPass, setForgotConfirmPass] = useState('');
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
@@ -253,13 +250,12 @@ export default function LoginPage() {
             <div style={{ position: 'relative' }}>
               <Mail size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
               <input 
-                type="email" 
+                type="text" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nom@entreprise.com"
                 className="input"
                 style={{ paddingLeft: '36px' }}
-                required
               />
             </div>
           </div>
@@ -287,18 +283,26 @@ export default function LoginPage() {
             <div style={{ position: 'relative' }}>
               <Lock size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
               <input 
-                type={showPassword ? 'text' : 'password'} 
+                type={showPassword ? "text" : "password"} 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="input"
-                style={{ paddingLeft: '36px', paddingRight: '36px' }}
-                required 
+                style={{ paddingLeft: '36px', paddingRight: '40px' }}
               />
-              <button
+              <button 
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-subtle)', cursor: 'pointer' }}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
               >
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -319,6 +323,8 @@ export default function LoginPage() {
               <>Démarrer mon Essai Gratuit (7j) <ArrowRight size={15} /></>
             )}
           </button>
+          
+
         </form>
 
 
@@ -347,13 +353,11 @@ export default function LoginPage() {
           <div className="card" style={{ maxWidth: '440px', width: '100%', border: '1px solid #ffffff', animation: 'fadeIn 0.2s ease' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Lock size={18} />
-              {forgotStep === 1 ? 'Réinitialisation du Mot de Passe' : 'Créer un Nouveau Mot de Passe'}
+              Réinitialisation du Mot de Passe
             </h3>
             
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              {forgotStep === 1 
-                ? 'Indiquez votre adresse e-mail enregistrée pour recevoir un e-mail de réinitialisation.' 
-                : 'Saisissez le code à 6 chiffres reçu par e-mail et définissez votre nouveau mot de passe.'}
+              Indiquez votre adresse e-mail enregistrée pour recevoir un lien de réinitialisation sécurisé (géré par Firebase).
             </p>
 
             {/* Error Message Alert */}
@@ -394,182 +398,56 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* STEP 1: REQUEST CODE */}
-            {forgotStep === 1 ? (
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                setForgotError(null);
-                setForgotSuccess(null);
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setForgotError(null);
+              setForgotSuccess(null);
 
-                const clean = forgotEmail.trim().toLowerCase();
-                const exists = isEmailRegistered(clean);
+              const clean = forgotEmail.trim().toLowerCase();
 
-                if (!exists) {
-                  setForgotError("Aucun compte n'est associé à cette adresse e-mail dans la base de données.");
-                  return;
+              setIsForgotLoading(true);
+              try {
+                if (!auth) throw new Error('Firebase Auth non initialisé');
+                await sendPasswordResetEmail(auth, clean);
+                setForgotSuccess(`Un e-mail contenant un lien de réinitialisation a été envoyé à ${clean}. Veuillez vérifier votre boîte de réception.`);
+              } catch (err: any) {
+                console.error(err);
+                if (err.code === 'auth/user-not-found') {
+                  setForgotError("Aucun compte n'est associé à cette adresse e-mail.");
+                } else if (err.code === 'auth/invalid-email') {
+                  setForgotError("Adresse e-mail invalide.");
+                } else {
+                  setForgotError(`Erreur: ${err.message || err.code}`);
                 }
+              } finally {
+                setIsForgotLoading(false);
+              }
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label className="label">Votre Adresse Email *</label>
+                <input 
+                  type="email" 
+                  value={forgotEmail} 
+                  onChange={(e) => setForgotEmail(e.target.value)} 
+                  placeholder="nom@entreprise.com" 
+                  className="input" 
+                  required 
+                />
+              </div>
 
-                setIsForgotLoading(true);
-                try {
-                  const res = await fetch('/api/auth/forgot-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: clean, clientRegistered: exists })
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    setForgotSuccess(`Un e-mail contenant votre code de vérification a été envoyé à ${clean}.`);
-                    setForgotStep(2);
-                  } else {
-                    setForgotError(data.error || "Erreur lors de l'envoi de l'e-mail.");
-                  }
-                } catch (err: any) {
-                  setForgotError("Erreur réseau lors de la demande de réinitialisation.");
-                } finally {
-                  setIsForgotLoading(false);
-                }
-              }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
-                  <label className="label">Votre Adresse Email *</label>
-                  <input 
-                    type="email" 
-                    value={forgotEmail} 
-                    onChange={(e) => setForgotEmail(e.target.value)} 
-                    placeholder="nom@entreprise.com" 
-                    className="input" 
-                    required 
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-                  <button 
-                    type="button" 
-                    onClick={() => { setShowForgotModal(false); setForgotError(null); setForgotSuccess(null); }} 
-                    className="btn btn-secondary"
-                  >
-                    Annuler
-                  </button>
-                  <button type="submit" disabled={isForgotLoading} className="btn btn-primary">
-                    {isForgotLoading ? 'Vérification...' : 'Envoyer l\'E-mail de Réinitialisation'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              /* STEP 2: VERIFY CODE AND SET NEW PASSWORD */
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                setForgotError(null);
-
-                if (!forgotCode || forgotCode.trim().length < 4) {
-                  setForgotError('Veuillez saisir le code de vérification reçu par e-mail.');
-                  return;
-                }
-
-                if (forgotNewPass.length < 6) {
-                  setForgotError('Le mot de passe doit comporter au moins 6 caractères.');
-                  return;
-                }
-
-                if (forgotNewPass !== forgotConfirmPass) {
-                  setForgotError('Les deux mots de passe ne correspondent pas.');
-                  return;
-                }
-
-                setIsForgotLoading(true);
-                try {
-                  const clean = forgotEmail.trim().toLowerCase();
-                  const res = await fetch('/api/auth/reset-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      email: clean,
-                      code: forgotCode.trim(),
-                      newPassword: forgotNewPass
-                    })
-                  });
-
-                  const data = await res.json();
-                  if (data.success) {
-                    // Update stored database password
-                    updateUserPassword(clean, forgotNewPass);
-                    setEmail(clean);
-                    setPassword('');
-                    setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.');
-                    setShowForgotModal(false);
-                    setForgotStep(1);
-                    setForgotCode('');
-                    setForgotNewPass('');
-                    setForgotConfirmPass('');
-                  } else {
-                    setForgotError(data.error || 'Code invalide ou expiré.');
-                  }
-                } catch (err: any) {
-                  setForgotError('Erreur réseau lors de la mise à jour du mot de passe.');
-                } finally {
-                  setIsForgotLoading(false);
-                }
-              }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                  <label className="label">Code de Vérification à 6 Chiffres *</label>
-                  <input 
-                    type="text" 
-                    value={forgotCode} 
-                    onChange={(e) => setForgotCode(e.target.value)} 
-                    placeholder="Ex: 849201" 
-                    className="input" 
-                    style={{ letterSpacing: '3px', fontWeight: 700, textAlign: 'center', fontSize: '1.1rem' }}
-                    required 
-                  />
-                </div>
-
-                <div>
-                  <label className="label">Nouveau Mot de Passe *</label>
-                  <input 
-                    type="password" 
-                    value={forgotNewPass} 
-                    onChange={(e) => setForgotNewPass(e.target.value)} 
-                    placeholder="••••••••" 
-                    className="input" 
-                    required 
-                  />
-                </div>
-
-                <div>
-                  <label className="label">Confirmer le Nouveau Mot de Passe *</label>
-                  <input 
-                    type="password" 
-                    value={forgotConfirmPass} 
-                    onChange={(e) => setForgotConfirmPass(e.target.value)} 
-                    placeholder="••••••••" 
-                    className="input" 
-                    required 
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-                  <button 
-                    type="button" 
-                    onClick={() => { setForgotStep(1); setForgotError(null); setForgotSuccess(null); }} 
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    ← Renvoyer un code
-                  </button>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      type="button" 
-                      onClick={() => setShowForgotModal(false)} 
-                      className="btn btn-secondary"
-                    >
-                      Fermer
-                    </button>
-                    <button type="submit" disabled={isForgotLoading} className="btn btn-primary">
-                      {isForgotLoading ? 'Mise à jour...' : 'Enregistrer le Nouveau Mot de Passe'}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => { setShowForgotModal(false); setForgotError(null); setForgotSuccess(null); }} 
+                  className="btn btn-secondary"
+                >
+                  Fermer
+                </button>
+                <button type="submit" disabled={isForgotLoading} className="btn btn-primary">
+                  {isForgotLoading ? 'Envoi...' : 'Envoyer le lien de Réinitialisation'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

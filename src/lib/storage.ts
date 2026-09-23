@@ -1,50 +1,6 @@
 import { Campaign, Lead, UniboxMessage, Deal, WarmupConfig, ImageTemplate, EmailAccount } from '@/types';
 
-export const INITIAL_IMAGE_TEMPLATES: ImageTemplate[] = [
-  {
-    id: 'coffee-mug',
-    title: 'Tasse à café matinale personnalisée',
-    category: 'coffee',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80',
-    backgroundUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=1200&auto=format&fit=crop&q=80',
-    defaultText: 'Un café pour {{firstName}} ? ☕',
-    textPosition: { x: 380, y: 320, fontSize: 32, color: '#2d1506', rotation: -5, maxWidth: 350 },
-    showCompanyLogo: true,
-    logoPosition: { x: 420, y: 220, width: 80, height: 80 }
-  },
-  {
-    id: 'office-whiteboard',
-    title: 'Tableau blanc réunion d\'équipe',
-    category: 'whiteboard',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=600&auto=format&fit=crop&q=80',
-    backgroundUrl: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=1200&auto=format&fit=crop&q=80',
-    defaultText: 'Objectif Q3 pour {{company}} :\n+250% de croissance avec {{firstName}} ! 🚀',
-    textPosition: { x: 350, y: 240, fontSize: 26, color: '#0f172a', rotation: 0, maxWidth: 450 },
-    showCompanyLogo: true,
-    logoPosition: { x: 520, y: 130, width: 90, height: 90 }
-  },
-  {
-    id: 'tech-laptop',
-    title: 'Écran MacBook avec interface dédiée',
-    category: 'laptop',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=600&auto=format&fit=crop&q=80',
-    backgroundUrl: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&auto=format&fit=crop&q=80',
-    defaultText: 'Audit exclusif préparé pour {{company}}\nDirectement pour {{firstName}}',
-    textPosition: { x: 440, y: 280, fontSize: 24, color: '#38bdf8', rotation: 0, maxWidth: 380 },
-    showCompanyLogo: false
-  },
-  {
-    id: 'billboard',
-    title: 'Panneau géant Times Square',
-    category: 'billboard',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=600&auto=format&fit=crop&q=80',
-    backgroundUrl: 'https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=1200&auto=format&fit=crop&q=80',
-    defaultText: 'BIENVENUE {{firstName | uppercase}}\nCHEZ LES LEADERS !',
-    textPosition: { x: 420, y: 200, fontSize: 34, color: '#facc15', rotation: 2, maxWidth: 500 },
-    showCompanyLogo: true,
-    logoPosition: { x: 480, y: 100, width: 110, height: 110 }
-  }
-];
+export const INITIAL_IMAGE_TEMPLATES: ImageTemplate[] = [];
 
 export const INITIAL_LEADS: Lead[] = [
   {
@@ -338,7 +294,6 @@ export const INITIAL_UNIBOX_MESSAGES: UniboxMessage[] = [
     leadName: 'Thomas Moreau',
     leadEmail: 'thomas.moreau@doctolib.fr',
     leadCompany: 'Doctolib',
-    leadAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     channel: 'email',
     direction: 'inbound',
     subject: 'Re: Café matinal pour Thomas & Doctolib ? ☕',
@@ -356,7 +311,6 @@ export const INITIAL_UNIBOX_MESSAGES: UniboxMessage[] = [
     leadName: 'Sophie Dubois',
     leadEmail: 'sophie.dubois@alan.com',
     leadCompany: 'Alan',
-    leadAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
     channel: 'linkedin',
     direction: 'inbound',
     snippet: 'Hello Alexandre, votre message tombe à pic. Envoyez-moi vos métriques détaillées.',
@@ -373,7 +327,6 @@ export const INITIAL_UNIBOX_MESSAGES: UniboxMessage[] = [
     leadName: 'Camille Laurent',
     leadEmail: 'camille.l@payfit.com',
     leadCompany: 'PayFit',
-    leadAvatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
     channel: 'email',
     direction: 'inbound',
     subject: 'Re: Café matinal pour Camille & PayFit ?',
@@ -391,7 +344,6 @@ export const INITIAL_UNIBOX_MESSAGES: UniboxMessage[] = [
     leadName: 'Julien Rousseau',
     leadEmail: 'j.rousseau@algolia.com',
     leadCompany: 'Algolia',
-    leadAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
     channel: 'email',
     direction: 'inbound',
     subject: 'Absence du bureau / Out of Office',
@@ -458,41 +410,34 @@ export const INITIAL_DEALS: Deal[] = [
 
 export const INITIAL_EMAIL_ACCOUNTS: EmailAccount[] = [
   {
-    id: 'acc-google-daniel',
-    name: 'Daniel Kiboko | Lemlist Standard',
-    email: 'danielkiboko218@gmail.com',
-    provider: 'google',
-    smtpHost: 'smtp.gmail.com',
+    id: 'acc-placeholder-default',
+    name: 'Mon compte d\'envoi principal',
+    email: 'votremail@votredomaine.com',
+    provider: 'custom',
+    smtpHost: 'smtp.votredomaine.com',
     smtpPort: 465,
     smtpSecure: true,
-    smtpUser: 'danielkiboko218@gmail.com',
+    smtpUser: 'votremail@votredomaine.com',
     smtpPass: '',
-    imapHost: 'imap.gmail.com',
+    imapHost: 'imap.votredomaine.com',
     imapPort: 993,
     imapSecure: true,
-    imapUser: 'danielkiboko218@gmail.com',
+    imapUser: 'votremail@votredomaine.com',
     imapPass: '',
-    status: 'connected',
+    status: 'untested',
     isDefault: true,
-    createdAt: '2026-09-13T09:00:00Z',
-    // Lemlist Standard Configuration
+    createdAt: new Date().toISOString(),
+    // Paramètres recommandés CRM Rayons (standard Lemlist)
     dailyLimit: 50,
     minDelaySeconds: 60,
     maxDelaySeconds: 180,
-    customTrackingDomain: 'track.rayons.net',
     plainTextMode: true,
-    warmupEnabled: true,
-    warmupScore: 99,
+    warmupEnabled: false,
+    warmupScore: 0,
     scheduleDays: [1, 2, 3, 4, 5],
     scheduleStartTime: '08:30',
     scheduleEndTime: '18:00',
-    dnsStatus: {
-      spf: 'pass',
-      dkim: 'pass',
-      dmarc: 'pass',
-      mx: 'pass'
-    },
-    signature: 'Cordialement,\nDaniel Kiboko\nDirecteur | Rayons\ndanielkiboko218@gmail.com\n\nSi vous ne souhaitez plus recevoir ces messages, répondez simplement "STOP".'
+    signature: 'Cordialement,\n[Votre Prénom Nom]\n[Votre Titre] | CRM Rayons\n[votre email]\n\nSi vous ne souhaitez plus recevoir ces messages, répondez simplement "STOP".'
   }
 ];
 

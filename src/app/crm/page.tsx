@@ -13,10 +13,12 @@ import {
   ArrowLeft, 
   Trash2,
   X,
-  CheckCircle2
+  CheckCircle2,
+  UploadCloud
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { Deal } from '@/types';
+import DataImporter from '@/components/DataImporter';
 
 const STAGES: { id: Deal['stage']; label: string; color: string }[] = [
   { id: 'lead', label: 'Pistes Chaudes', color: '#ffffff' },
@@ -30,6 +32,8 @@ export default function CrmPipelinePage() {
   const { deals, updateDealStage, deleteDeal, createDeal, leads } = useCrm();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
+  
   const [dealTitle, setDealTitle] = useState('');
   const [dealCompany, setDealCompany] = useState('');
   const [dealLeadName, setDealLeadName] = useState('');
@@ -91,10 +95,16 @@ export default function CrmPipelinePage() {
           </p>
         </div>
 
-        <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
-          <Plus size={15} />
-          Créer un Deal
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => setIsImporterOpen(true)} className="btn btn-secondary">
+            <UploadCloud size={15} />
+            Importer CSV/Excel
+          </button>
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
+            <Plus size={15} />
+            Créer un Deal
+          </button>
+        </div>
       </div>
 
       {/* Metrics Bar - Starlink Style */}
@@ -316,6 +326,11 @@ export default function CrmPipelinePage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* IMPORTER MODAL */}
+      {isImporterOpen && (
+        <DataImporter onClose={() => setIsImporterOpen(false)} />
       )}
     </div>
   );

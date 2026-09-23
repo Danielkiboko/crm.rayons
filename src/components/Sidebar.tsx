@@ -15,10 +15,12 @@ import {
   Lock,
   Mail,
   Radio,
-  Sliders
+  Sliders,
+  Settings
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
 import { useAuth } from '@/context/AuthContext';
+import { isSuperAdminEmail } from '@/lib/userStore';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -27,9 +29,7 @@ export default function Sidebar() {
 
   const unreadMessagesCount = messages.filter(m => !m.read).length;
 
-  const isSuperAdmin = user?.role === 'superadmin' || 
-    user?.email?.toLowerCase() === 'danielkiboko218@gmail.com' ||
-    user?.email?.toLowerCase() === 'crm@rayons.net';
+  const isSuperAdmin = user?.role === 'superadmin' || isSuperAdminEmail(user?.email);
 
   return (
     <aside className="sidebar">
@@ -69,7 +69,7 @@ export default function Sidebar() {
               Administration Centrale
             </div>
             <Link
-              href="/admin/users"
+              href="/cpanel/agents"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -77,8 +77,8 @@ export default function Sidebar() {
                 padding: '10px 12px',
                 borderRadius: 'var(--radius-sm)',
                 color: '#ffffff',
-                background: pathname.startsWith('/admin') ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                border: pathname.startsWith('/admin') ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.12)',
+                background: pathname.startsWith('/cpanel') ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                border: pathname.startsWith('/cpanel') ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.12)',
                 fontWeight: 700,
                 fontSize: '0.85rem'
               }}
@@ -101,8 +101,9 @@ export default function Sidebar() {
 
         {[
           { name: 'Campagnes All-in-One', href: '/campaigns', icon: Send, badge: null },
-          { name: 'Routes Télécom (SMS & RCS)', href: '/settings/telecom', icon: Radio, badge: 'SMPP' },
+          { name: 'Paramètres Généraux', href: '/settings/general', icon: Settings, badge: null },
           { name: 'E-mails (Standard Lemlist)', href: '/settings/email', icon: Mail, badge: 'SMTP' },
+          { name: 'Intégration LinkedIn', href: '/settings/linkedin', icon: Layers, badge: 'B2B' },
           { name: 'Unibox Hub', href: '/unibox', icon: Inbox, badge: unreadMessagesCount > 0 ? unreadMessagesCount : null }
         ].map((item) => {
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));

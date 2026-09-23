@@ -1,6 +1,6 @@
 export type ChannelType = 'email' | 'linkedin' | 'sms' | 'rcs' | 'call' | 'task';
 
-export type UserRole = 'superadmin' | 'admin' | 'sales' | 'viewer';
+export type UserRole = 'superadmin' | 'admin' | 'client' | 'sales' | 'viewer';
 
 export interface User {
   id: string;
@@ -19,7 +19,21 @@ export interface User {
   subscriptionExpiresAt?: string;
   lastLogin?: string;
   smppCredits?: number; // Crédits SMS / SMPP disponibles
+  rcsCredits?: number; // Crédits Google RCS disponibles
   dailyEmailLimit?: number; // Limite journalière standard Lemlist
+  // Upgrades / Options payantes supplémentaires
+  hasSmsUpgrade?: boolean; // Option SMS activée
+  hasRcsUpgrade?: boolean; // Option RCS activée
+  hasLinkedinUpgrade?: boolean; // Option LinkedIn activée
+}
+
+export interface SaasPricingConfig {
+  baseEmailPrice: number; // 30 ($/mois pour Email Marketing de base)
+  smsUnitPrice: number; // 0.036 ($/SMS)
+  smsPackPrice1000: number; // 36 ($/pack de 1000 SMS)
+  rcsUnitPrice: number; // 0.040 ($/message RCS)
+  rcsPackPrice1000: number; // 40 ($/pack de 1000 RCS)
+  linkedinMonthlyPrice: number; // 25 ($/mois pour automatisation LinkedIn)
 }
 
 export type StepActionType = 
@@ -54,6 +68,8 @@ export interface CampaignStep {
   subjectB?: string;
   bodyB?: string;
   conditionCriteria?: 'opened' | 'clicked' | 'replied' | 'linkedin_connected';
+  senderId?: string; // Expéditeur SMS/RCS alphanumérique (ex: RAYONS)
+  autoCleanGsm?: boolean; // Nettoyage automatique des caractères spéciaux en GSM-7
 }
 
 export interface Lead {
@@ -71,6 +87,7 @@ export interface Lead {
   customVariables?: Record<string, string>;
   campaignId?: string;
   currentStepIndex?: number;
+  icebreaker?: string; // AI generated personalized message
   tags: string[];
   createdAt: string;
   lastActivity?: string;
@@ -78,6 +95,9 @@ export interface Lead {
   emailStatus?: 'valid' | 'risky' | 'invalid' | 'unverified';
   emailVerificationReason?: string;
   score: number;
+  deliveryStatus?: 'delivered' | 'failed' | 'bounced' | 'pending' | 'opened' | 'replied';
+  deliveryError?: string;
+  deliveryDate?: string;
 }
 
 export interface Campaign {

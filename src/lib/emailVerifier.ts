@@ -263,13 +263,3 @@ export async function verifyEmailAddress(emailInput: string): Promise<Verificati
   };
 }
 
-// Bulk verification batch helper
-export async function verifyEmailBatch(emails: string[]): Promise<VerificationResult[]> {
-  const results: VerificationResult[] = [];
-  for (const email of emails) {
-    if (!email.trim()) continue;
-    const res = await verifyEmailAddress(email.trim());
-    results.push(res);
-  }
-  return results;
-}

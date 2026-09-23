@@ -30,7 +30,7 @@ import { Lead } from '@/types';
 import { parseExcelOrCsvFile, ParsedLeadResult } from '@/lib/excelParser';
 
 export default function LeadsPage() {
-  const { leads, addLead, importLeads, deleteLead, verifyLeadEmail, verifyAllLeads, campaigns } = useCrm();
+  const { leads, addLead, importLeads, updateLead, deleteLead, verifyLeadEmail, verifyAllLeads, generateIcebreakers, campaigns, cleanAndDeduplicateAllLeads } = useCrm();
 
   const [search, setSearch] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -41,12 +41,27 @@ export default function LeadsPage() {
   const [isBatchVerifying, setIsBatchVerifying] = useState(false);
   const [batchNotice, setBatchNotice] = useState<string | null>(null);
 
+  // Deduplication & Phone cleaning state
+  const [dedupeNotice, setDedupeNotice] = useState<{
+    open: boolean;
+    totalBefore: number;
+    totalAfter: number;
+    duplicatesRemoved: number;
+    cleanedPhones: number;
+    creditsSaved: number;
+  } | null>(null);
+  
+  const [isGeneratingIcebreakers, setIsGeneratingIcebreakers] = useState(false);
+  const [editingIcebreakerLead, setEditingIcebreakerLead] = useState<Lead | null>(null);
+  const [tempIcebreaker, setTempIcebreaker] = useState('');
+
   // Excel & File Import State
   const [importMode, setImportMode] = useState<'excel' | 'paste'>('excel');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedExcelResult, setParsedExcelResult] = useState<ParsedLeadResult | null>(null);
   const [isParsingExcel, setIsParsingExcel] = useState(false);
   const [autoVerifyOnImport, setAutoVerifyOnImport] = useState(true);
+  const [autoDedupeOnImport, setAutoDedupeOnImport] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
 
   // New Single Lead Form State
@@ -141,8 +156,13 @@ export default function LeadsPage() {
 
   const handleConfirmExcelImport = () => {
     if (!parsedExcelResult || parsedExcelResult.leads.length === 0) return;
-    const count = importLeads(parsedExcelResult.leads);
-    setImportCountMessage(`${count} prospects importés avec succès depuis "${uploadedFile?.name || 'le fichier'}" !`);
+    const count = importLeads(parsedExcelResult.leads, {
+      checkPhone: autoDedupeOnImport,
+      checkEmail: autoDedupeOnImport,
+      normalizePhones: true,
+      defaultCountryCode: '243'
+    });
+    setImportCountMessage(`${count} prospects importés et assainis depuis "${uploadedFile?.name || 'le fichier'}" !`);
     if (autoVerifyOnImport) {
       setTimeout(() => {
         handleBatchVerify();
@@ -154,6 +174,27 @@ export default function LeadsPage() {
       setUploadedFile(null);
       setParsedExcelResult(null);
     }, 2000);
+  };
+
+  const handleCleanAndDeduplicate = () => {
+    const totalBefore = leads.length;
+    const report = cleanAndDeduplicateAllLeads({
+      checkPhone: true,
+      checkEmail: true,
+      normalizePhones: true,
+      defaultCountryCode: '243'
+    });
+    setDedupeNotice({
+      open: true,
+      totalBefore,
+      totalAfter: report.uniqueCount,
+      duplicatesRemoved: report.duplicatesRemoved.length,
+      cleanedPhones: report.cleanedPhonesCount,
+      creditsSaved: report.estimatedSmsCreditsSaved
+    });
+    setTimeout(() => {
+      setDedupeNotice(prev => prev ? { ...prev, open: false } : null);
+    }, 10000);
   };
 
   const handleParseAndImportCsv = () => {
@@ -219,6 +260,34 @@ export default function LeadsPage() {
     }
   };
 
+  const handleGenerateIcebreakers = async () => {
+    setIsGeneratingIcebreakers(true);
+    setBatchNotice(null);
+    try {
+      const idsWithoutIcebreaker = filteredLeads.filter(l => !l.icebreaker).map(l => l.id);
+      if (idsWithoutIcebreaker.length === 0) {
+        setBatchNotice("Tous les contacts visibles ont déjà un Icebreaker !");
+        setIsGeneratingIcebreakers(false);
+        setTimeout(() => setBatchNotice(null), 3000);
+        return;
+      }
+      await generateIcebreakers(idsWithoutIcebreaker);
+      setBatchNotice(`${idsWithoutIcebreaker.length} Icebreakers générés par l'IA !`);
+      setTimeout(() => setBatchNotice(null), 5000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsGeneratingIcebreakers(false);
+    }
+  };
+
+  const handleSaveIcebreaker = () => {
+    if (editingIcebreakerLead) {
+      updateLead(editingIcebreakerLead.id, { icebreaker: tempIcebreaker });
+      setEditingIcebreakerLead(null);
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -233,6 +302,24 @@ export default function LeadsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={handleGenerateIcebreakers} 
+            disabled={isGeneratingIcebreakers || leads.length === 0} 
+            className="btn btn-secondary"
+            title="Générer des phrases d'accroche par IA pour les contacts affichés"
+          >
+            {isGeneratingIcebreakers ? (
+              <>
+                <RefreshCw size={15} className="spin" color="#c084fc" />
+                Génération...
+              </>
+            ) : (
+              <>
+                <Sparkles size={16} color="#c084fc" />
+                Icebreakers IA
+              </>
+            )}
+          </button>
           <button 
             onClick={handleBatchVerify} 
             disabled={isBatchVerifying || leads.length === 0} 
@@ -254,6 +341,16 @@ export default function LeadsPage() {
           <Link href="/verifier" className="btn btn-secondary">
             Outil Dédié
           </Link>
+          <button 
+            onClick={handleCleanAndDeduplicate} 
+            disabled={leads.length === 0} 
+            className="btn btn-secondary"
+            title="Formater les numéros au standard international (+243) et supprimer les doublons pour économiser vos crédits SMS"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <ShieldCheck size={16} color="#34d399" />
+            Anti-Doublon & Tél (+243)
+          </button>
           <button onClick={() => setIsFinderModalOpen(true)} className="btn btn-secondary">
             <Sparkles size={16} color="#ffffff" />
             Lead Finder
@@ -273,6 +370,52 @@ export default function LeadsPage() {
         <div style={{ padding: '12px 16px', background: '#ffffff', color: '#000000', fontWeight: 700, fontSize: '0.85rem', marginBottom: '20px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <CheckCircle2 size={18} color="#000000" />
           {batchNotice}
+        </div>
+      )}
+
+      {dedupeNotice?.open && (
+        <div style={{
+          padding: '14px 18px',
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid #10b981',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '20px',
+          color: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#000000'
+            }}>
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>
+                Nettoyage & Déduplication Télécom terminés avec succès !
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginTop: '2px' }}>
+                <strong>{dedupeNotice.duplicatesRemoved}</strong> doublon(s) éliminé(s) ({dedupeNotice.creditsSaved} crédits SMS économisés) · 
+                <strong> {dedupeNotice.cleanedPhones}</strong> numéro(s) converti(s) au standard international (+243 E.164) · 
+                Base assainie : <strong>{dedupeNotice.totalAfter}</strong> contacts uniques restants.
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={() => setDedupeNotice(null)} 
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -408,6 +551,17 @@ export default function LeadsPage() {
 
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      onClick={() => {
+                        setTempIcebreaker(lead.icebreaker || '');
+                        setEditingIcebreakerLead(lead);
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '5px 8px', borderColor: lead.icebreaker ? '#c084fc' : 'var(--border-subtle)' }}
+                      title={lead.icebreaker ? "Modifier l'Icebreaker IA" : "Ajouter un Icebreaker"}
+                    >
+                      <Sparkles size={13} color={lead.icebreaker ? "#c084fc" : "#ffffff"} />
+                    </button>
                     <button
                       onClick={() => handleVerifySingle(lead.id)}
                       disabled={verifyingLeadId === lead.id}
@@ -572,6 +726,11 @@ export default function LeadsPage() {
                         <span className="badge badge-primary">
                           Email : <strong>{parsedExcelResult.mappedColumns.email || 'Détecté'}</strong>
                         </span>
+                        {parsedExcelResult.mappedColumns.phone && (
+                          <span className="badge badge-success" style={{ background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid #34d399' }}>
+                            📱 Tél (E.164 +243) : <strong>{parsedExcelResult.mappedColumns.phone}</strong>
+                          </span>
+                        )}
                         <span className="badge" style={{ background: 'rgba(255,255,255,0.08)' }}>
                           Entreprise : <strong>{parsedExcelResult.mappedColumns.company || 'Détecté'}</strong>
                         </span>
@@ -592,6 +751,7 @@ export default function LeadsPage() {
                             <tr style={{ background: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
                               <th style={{ padding: '8px 12px' }}>Nom</th>
                               <th style={{ padding: '8px 12px' }}>Email</th>
+                              <th style={{ padding: '8px 12px' }}>Téléphone (Formaté E.164)</th>
                               <th style={{ padding: '8px 12px' }}>Entreprise</th>
                               <th style={{ padding: '8px 12px' }}>Poste</th>
                             </tr>
@@ -601,6 +761,9 @@ export default function LeadsPage() {
                               <tr key={idx} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                                 <td style={{ padding: '8px 12px', fontWeight: 600 }}>{lead.firstName} {lead.lastName}</td>
                                 <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{lead.email || '—'}</td>
+                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: lead.phone ? '#34d399' : 'var(--text-subtle)' }}>
+                                  {lead.phone || '—'}
+                                </td>
                                 <td style={{ padding: '8px 12px' }}>{lead.company}</td>
                                 <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{lead.jobTitle}</td>
                               </tr>
@@ -610,14 +773,27 @@ export default function LeadsPage() {
                       </div>
                     </div>
 
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', marginBottom: '16px' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={autoVerifyOnImport} 
-                        onChange={(e) => setAutoVerifyOnImport(e.target.checked)} 
-                      />
-                      <span>Vérifier automatiquement la délivrabilité des e-mails en direct (RFC 5322 & DNS)</span>
-                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={autoDedupeOnImport} 
+                          onChange={(e) => setAutoDedupeOnImport(e.target.checked)} 
+                        />
+                        <span>
+                          🛡️ <strong>Éliminer les doublons de numéros et d'emails</strong> (Évite de payer deux fois le même SMS)
+                        </span>
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={autoVerifyOnImport} 
+                          onChange={(e) => setAutoVerifyOnImport(e.target.checked)} 
+                        />
+                        <span>Vérifier automatiquement la délivrabilité des e-mails en direct (RFC 5322 & DNS)</span>
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>
@@ -808,6 +984,45 @@ export default function LeadsPage() {
               </button>
               <button onClick={handleAddFoundLeads} className="btn btn-primary">
                 Ajouter ces 2 prospects à la base
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: EDIT ICEBREAKER */}
+      {editingIcebreakerLead && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Sparkles size={20} color="#c084fc" />
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Icebreaker IA</h2>
+              </div>
+              <button onClick={() => setEditingIcebreakerLead(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Phrase d'accroche pour <strong>{editingIcebreakerLead.firstName} {editingIcebreakerLead.lastName}</strong> ({editingIcebreakerLead.company}) :
+            </p>
+
+            <textarea 
+              rows={4}
+              value={tempIcebreaker}
+              onChange={(e) => setTempIcebreaker(e.target.value)}
+              className="textarea"
+              placeholder="Ex: Bonjour, impressionnant parcours..."
+              style={{ marginBottom: '16px' }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button type="button" onClick={() => setEditingIcebreakerLead(null)} className="btn btn-secondary">
+                Annuler
+              </button>
+              <button type="button" onClick={handleSaveIcebreaker} className="btn btn-primary" style={{ background: '#c084fc', color: 'white' }}>
+                Enregistrer
               </button>
             </div>
           </div>

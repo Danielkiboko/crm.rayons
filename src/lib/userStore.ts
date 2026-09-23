@@ -1,11 +1,51 @@
-import { User } from '@/types';
+import { User, SaasPricingConfig } from '@/types';
+
+// Emails SuperAdmin lus depuis les variables d'environnement
+// Format : "email1@domaine.com,email2@domaine.com"
+const getSuperAdminEmails = (): string[] => {
+  const envEmails = process.env.NEXT_PUBLIC_SUPERADMIN_EMAILS || '';
+  return envEmails
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+};
+
+export const DEFAULT_SAAS_PRICING: SaasPricingConfig = {
+  baseEmailPrice: 30, // 30 $/mois pour Cold Email Marketing Lemlist standard
+  smsUnitPrice: 0.036, // 0.036 $ / SMS
+  smsPackPrice1000: 36, // 36 $ / 1000 SMS
+  rcsUnitPrice: 0.040, // 0.040 $ / message RCS Google
+  rcsPackPrice1000: 40, // 40 $ / 1000 RCS
+  linkedinMonthlyPrice: 25 // 25 $/mois automatisation B2B
+};
+
+const SAAS_PRICING_STORAGE_KEY = 'crm_rayons_saas_pricing_v1';
+
+export function getSaasPricing(): SaasPricingConfig {
+  if (typeof window === 'undefined') return DEFAULT_SAAS_PRICING;
+  try {
+    const data = localStorage.getItem(SAAS_PRICING_STORAGE_KEY);
+    if (!data) return DEFAULT_SAAS_PRICING;
+    return { ...DEFAULT_SAAS_PRICING, ...JSON.parse(data) };
+  } catch {
+    return DEFAULT_SAAS_PRICING;
+  }
+}
+
+export function saveSaasPricing(pricing: SaasPricingConfig): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SAAS_PRICING_STORAGE_KEY, JSON.stringify(pricing));
+  } catch (err) {
+    console.error('Error saving SaaS pricing', err);
+  }
+}
 
 export const INITIAL_SAAS_USERS: User[] = [
   {
     id: 'user-superadmin-daniel',
     name: 'Daniel Kiboko',
     email: 'danielkiboko218@gmail.com',
-    password: 'RayonsAdmin2026!',
     role: 'superadmin',
     companyName: 'CRM Rayons',
     createdAt: '2026-01-01T00:00:00Z',
@@ -15,7 +55,11 @@ export const INITIAL_SAAS_USERS: User[] = [
     subscriptionStatus: 'pro_active',
     trialEndsAt: undefined,
     smppCredits: 100000,
-    dailyEmailLimit: 1000
+    rcsCredits: 50000,
+    dailyEmailLimit: 1000,
+    hasSmsUpgrade: true,
+    hasRcsUpgrade: true,
+    hasLinkedinUpgrade: true
   }
 ];
 
@@ -31,8 +75,9 @@ export function getSaasUsers(): User[] {
     }
     const parsed: User[] = JSON.parse(data);
     // Ensure Super-Admin is always present
+    const superAdminEmails = getSuperAdminEmails();
     const hasSuperAdmin = parsed.some(
-      u => u.email.toLowerCase() === 'danielkiboko218@gmail.com' || u.email.toLowerCase() === 'crm@rayons.net'
+      u => superAdminEmails.includes(u.email.toLowerCase())
     );
     if (!hasSuperAdmin) {
       const updated = [INITIAL_SAAS_USERS[0], ...parsed];
@@ -53,49 +98,6 @@ export function saveSaasUsers(users: User[]): void {
   } catch (err) {
     console.error('Error saving SaaS users', err);
   }
-}
-
-export function isEmailRegistered(email: string): boolean {
-  const clean = email.trim().toLowerCase();
-  const users = getSaasUsers();
-  return users.some(u => u.email.toLowerCase() === clean);
-}
-
-export function findUserByEmail(email: string): User | undefined {
-  const clean = email.trim().toLowerCase();
-  const users = getSaasUsers();
-  return users.find(u => u.email.toLowerCase() === clean);
-}
-
-export function verifyUserCredentials(email: string, pass: string): { success: boolean; user?: User; error?: string } {
-  const clean = email.trim().toLowerCase();
-  const user = findUserByEmail(clean);
-
-  if (!user) {
-    return { success: false, error: 'Aucun compte n\'existe avec cet e-mail dans la base de données. Veuillez vous inscrire via l\'essai 7 jours.' };
-  }
-
-  if (user.status === 'suspended') {
-    return { success: false, error: 'Votre compte a été suspendu par l\'administrateur. Veuillez contacter crm@rayons.net.' };
-  }
-
-  // Strict verification against database stored password
-  if (!user.password || user.password !== pass) {
-    return { success: false, error: 'Mot de passe incorrect. Veuillez vérifier vos identifiants ou réinitialiser votre mot de passe.' };
-  }
-
-  return { success: true, user };
-}
-
-export function updateUserPassword(email: string, newPassword: string): boolean {
-  const clean = email.trim().toLowerCase();
-  const users = getSaasUsers();
-  const user = users.find(u => u.email.toLowerCase() === clean);
-  if (!user) return false;
-
-  user.password = newPassword;
-  saveSaasUsers(users);
-  return true;
 }
 
 export function addSaasUser(user: User): User[] {
@@ -125,8 +127,80 @@ export function deleteSaasUser(userId: string): User[] {
   return updated;
 }
 
+export function toggleUserUpgrade(
+  userId: string,
+  upgrade: 'sms' | 'rcs' | 'linkedin',
+  enabled: boolean,
+  initialCredits?: number
+): User[] {
+  const users = getSaasUsers();
+  const updated = users.map(u => {
+    if (u.id !== userId) return u;
+    if (upgrade === 'sms') {
+      return {
+        ...u,
+        hasSmsUpgrade: enabled,
+        smppCredits: enabled ? (u.smppCredits ?? 0) + (initialCredits ?? 1000) : u.smppCredits
+      };
+    }
+    if (upgrade === 'rcs') {
+      return {
+        ...u,
+        hasRcsUpgrade: enabled,
+        rcsCredits: enabled ? (u.rcsCredits ?? 0) + (initialCredits ?? 1000) : u.rcsCredits
+      };
+    }
+    if (upgrade === 'linkedin') {
+      return {
+        ...u,
+        hasLinkedinUpgrade: enabled
+      };
+    }
+    return u;
+  });
+  saveSaasUsers(updated);
+  return updated;
+}
+
+export function addUserCredits(
+  userId: string,
+  channel: 'sms' | 'rcs',
+  count: number
+): User[] {
+  const users = getSaasUsers();
+  const updated = users.map(u => {
+    if (u.id !== userId) return u;
+    if (channel === 'sms') {
+      return { ...u, hasSmsUpgrade: true, smppCredits: (u.smppCredits || 0) + count };
+    }
+    if (channel === 'rcs') {
+      return { ...u, hasRcsUpgrade: true, rcsCredits: (u.rcsCredits || 0) + count };
+    }
+    return u;
+  });
+  saveSaasUsers(updated);
+  return updated;
+}
+
 /**
- * Check if a user trial is valid or expired
+ * Retourne true si l'email est celui d'un SuperAdmin CRM Rayons.
+ * La source de vérité est la variable d'env NEXT_PUBLIC_SUPERADMIN_EMAILS
+ * ou le rôle 'superadmin' en base.
+ */
+export function isSuperAdminEmail(email?: string): boolean {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  const superAdminEmails = getSuperAdminEmails();
+  return (
+    superAdminEmails.includes(clean) ||
+    clean === 'danielkiboko218@gmail.com' ||
+    clean === 'crm@rayons.net' ||
+    clean === 'daniel.kiboko@rayons.net'
+  );
+}
+
+/**
+ * Calcule le statut d'abonnement/trial d'un utilisateur CRM Rayons.
  */
 export function checkUserTrialStatus(user: User | null): {
   isSuperAdmin: boolean;
@@ -139,8 +213,8 @@ export function checkUserTrialStatus(user: User | null): {
     return { isSuperAdmin: false, isProActive: false, isTrialActive: false, isExpired: true, daysRemaining: 0 };
   }
 
-  // Super Admin is never blocked
-  if (user.role === 'superadmin' || user.email === 'danielkiboko218@gmail.com' || user.email === 'crm@rayons.net' || user.email === 'daniel.kiboko@rayons.net') {
+  // Super Admin is never blocked — détection via env var ou rôle
+  if (user.role === 'superadmin' || isSuperAdminEmail(user.email)) {
     return { isSuperAdmin: true, isProActive: true, isTrialActive: false, isExpired: false, daysRemaining: 999 };
   }
 

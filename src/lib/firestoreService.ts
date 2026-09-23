@@ -7,15 +7,28 @@ import {
   deleteDoc, 
   query, 
   where,
-  serverTimestamp 
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
-import { User, Lead, Campaign, UniboxMessage, Deal, EmailAccount } from '@/types';
+import { User, Lead, Campaign, UniboxMessage } from '@/types';
 
 /**
- * Service d'interaction Cloud Firestore pour LemFlow CRM SaaS.
+ * Service d'interaction Cloud Firestore pour CRM Rayons SaaS.
  * Fournit une synchronisation temps réel multi-tenant avec repli local transparent.
  */
+
+// Firestore WriteBatch max = 500 opérations
+const BATCH_LIMIT = 499;
+
+/** Découpe un tableau en sous-tableaux de `size` éléments max */
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
 
 // ================= USERS MANAGEMENT =================
 
@@ -23,8 +36,10 @@ export async function syncUserToFirestore(user: User): Promise<boolean> {
   if (!isFirebaseConfigured || !db) return false;
   try {
     const userRef = doc(db, 'users', user.id);
+    // Ne jamais persister le mot de passe en clair
+    const { password: _omit, ...safeUser } = user as any;
     await setDoc(userRef, {
-      ...user,
+      ...safeUser,
       updatedAt: serverTimestamp()
     }, { merge: true });
     return true;
@@ -95,8 +110,14 @@ export async function syncLeadsToFirestore(userId: string, leads: Lead[]): Promi
   if (!isFirebaseConfigured || !db || !userId) return false;
   try {
     const leadsCol = collection(db, 'users', userId, 'leads');
-    for (const lead of leads) {
-      await setDoc(doc(leadsCol, lead.id), lead, { merge: true });
+    const chunks = chunkArray(leads, BATCH_LIMIT);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const lead of chunk) {
+        batch.set(doc(leadsCol, lead.id), lead, { merge: true });
+      }
+      await batch.commit();
     }
     return true;
   } catch (error) {
@@ -117,25 +138,20 @@ export async function fetchLeadsFromFirestore(userId: string): Promise<Lead[]> {
   }
 }
 
-export async function deleteLeadFromFirestore(userId: string, leadId: string): Promise<boolean> {
-  if (!isFirebaseConfigured || !db || !userId) return false;
-  try {
-    await deleteDoc(doc(db, 'users', userId, 'leads', leadId));
-    return true;
-  } catch (error) {
-    console.error('Firestore deleteLead error:', error);
-    return false;
-  }
-}
-
 // ================= CAMPAIGNS =================
 
 export async function syncCampaignsToFirestore(userId: string, campaigns: Campaign[]): Promise<boolean> {
   if (!isFirebaseConfigured || !db || !userId) return false;
   try {
     const campCol = collection(db, 'users', userId, 'campaigns');
-    for (const c of campaigns) {
-      await setDoc(doc(campCol, c.id), c, { merge: true });
+    const chunks = chunkArray(campaigns, BATCH_LIMIT);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const c of chunk) {
+        batch.set(doc(campCol, c.id), c, { merge: true });
+      }
+      await batch.commit();
     }
     return true;
   } catch (error) {
@@ -156,13 +172,16 @@ export async function fetchCampaignsFromFirestore(userId: string): Promise<Campa
   }
 }
 
-export async function deleteCampaignFromFirestore(userId: string, campaignId: string): Promise<boolean> {
+// ================= MESSAGES (UNIBOX) =================
+
+export async function saveMessageToFirestore(userId: string, message: UniboxMessage): Promise<boolean> {
   if (!isFirebaseConfigured || !db || !userId) return false;
   try {
-    await deleteDoc(doc(db, 'users', userId, 'campaigns', campaignId));
+    const msgRef = doc(db, 'users', userId, 'messages', message.id);
+    await setDoc(msgRef, message, { merge: true });
     return true;
   } catch (error) {
-    console.error('Firestore deleteCampaign error:', error);
+    console.error('Firestore saveMessage error:', error);
     return false;
   }
 }

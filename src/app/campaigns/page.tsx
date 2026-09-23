@@ -19,9 +19,14 @@ import {
   RefreshCw,
   CheckCircle2,
   X,
-  Server
+  Server,
+  Lock,
+  Smartphone,
+  MessageSquare,
+  AlertCircle
 } from 'lucide-react';
 import { useCrm } from '@/context/CrmContext';
+import { useAuth } from '@/context/AuthContext';
 import { Campaign } from '@/types';
 
 export default function CampaignsPage() {
@@ -34,6 +39,10 @@ export default function CampaignsPage() {
     leads,
     sendBulkCampaignLive 
   } = useCrm();
+  const { user, trialStatus } = useAuth();
+
+  const isSuperAdmin = trialStatus.isSuperAdmin || user?.role === 'superadmin';
+  const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
 
   const [liveSendModalCamp, setLiveSendModalCamp] = useState<Campaign | null>(null);
   const [isSendingLive, setIsSendingLive] = useState(false);
@@ -41,6 +50,26 @@ export default function CampaignsPage() {
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number } | null>(null);
 
   const defaultAccount = emailAccounts.find(a => a.isDefault) || emailAccounts[0];
+
+  const hasUpgradeFor = (channel: string): boolean => {
+    if (isSuperAdmin) return true;
+    if (channel === 'email' || channel === 'delay' || channel === 'task') return true;
+    if (channel === 'sms') return !!user?.hasSmsUpgrade && (user?.smppCredits ?? 0) > 0;
+    if (channel === 'rcs') return !!user?.hasRcsUpgrade && (user?.rcsCredits ?? 0) > 0;
+    if (channel === 'linkedin') return !!user?.hasLinkedinUpgrade;
+    return false;
+  };
+
+  const handleToggleCampaign = (camp: Campaign) => {
+    if (camp.status !== 'active') {
+      const blockedStep = camp.steps.find(s => !hasUpgradeFor(s.channel));
+      if (blockedStep) {
+        setUpgradeNotice(`🔒 Impossible de lancer "${camp.name}" : étape ${blockedStep.channel.toUpperCase()} non incluse dans votre forfait de base Email (30$/mois). Veuillez contacter votre administrateur C-Panel.`);
+        return;
+      }
+    }
+    toggleCampaignStatus(camp.id);
+  };
 
   const handleStartLiveSend = async () => {
     if (!liveSendModalCamp) return;
@@ -73,6 +102,35 @@ export default function CampaignsPage() {
           Créer une Campagne
         </Link>
       </div>
+
+      {/* Upgrade Notice Banner */}
+      {upgradeNotice && (
+        <div style={{
+          padding: '14px 18px',
+          background: 'rgba(239, 68, 68, 0.12)',
+          border: '1px solid #ef4444',
+          borderRadius: 'var(--radius-sm)',
+          color: '#f87171',
+          fontSize: '0.85rem',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Lock size={18} />
+            <span>{upgradeNotice}</span>
+          </div>
+          <button
+            onClick={() => setUpgradeNotice(null)}
+            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '4px' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Campaigns List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -139,7 +197,7 @@ export default function CampaignsPage() {
                   </button>
 
                   <button 
-                    onClick={() => toggleCampaignStatus(camp.id)}
+                    onClick={() => handleToggleCampaign(camp)}
                     className="btn btn-secondary btn-sm"
                   >
                     {camp.status === 'active' ? <Pause size={14} /> : <Play size={14} color="#10b981" />}

@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import AuthGuard from '@/components/AuthGuard';
 import PaywallModal from '@/components/PaywallModal';
+import CpanelLayout from '@/components/CpanelLayout';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +19,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       {isLoginPage ? (
         <main>{children}</main>
+      ) : pathname.startsWith('/cpanel') ? (
+        <CpanelLayout>{children}</CpanelLayout>
       ) : (
         <div className="app-container">
           <Sidebar />

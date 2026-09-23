@@ -21,7 +21,9 @@ import {
   Mail,
   Key,
   Radio,
-  ExternalLink
+  ExternalLink,
+  Smartphone,
+  MessageSquare
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -32,13 +34,19 @@ import {
   addSaasUser, 
   updateSaasUser, 
   deleteSaasUser, 
-  checkUserTrialStatus 
+  checkUserTrialStatus,
+  isSuperAdminEmail,
+  toggleUserUpgrade,
+  addUserCredits
 } from '@/lib/userStore';
 import { 
   fetchAllUsersFromFirestore, 
   syncUserToFirestore, 
   deleteUserFromFirestore 
 } from '@/lib/firestoreService';
+import { fetchUsersFromSupabase, syncUserToSupabase } from '@/lib/supabaseService';
+import { createAdminSecondaryAppAuth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -56,7 +64,11 @@ export default function AdminUsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [newCompany, setNewCompany] = useState('');
   const [newInitialPlan, setNewInitialPlan] = useState<'trial' | 'pro_monthly'>('trial');
-  const [newSmppCredits, setNewSmppCredits] = useState(500);
+  const [newSmppCredits, setNewSmppCredits] = useState(1000);
+  const [newRcsCredits, setNewRcsCredits] = useState(1000);
+  const [newHasSmsUpgrade, setNewHasSmsUpgrade] = useState(false);
+  const [newHasRcsUpgrade, setNewHasRcsUpgrade] = useState(false);
+  const [newHasLinkedinUpgrade, setNewHasLinkedinUpgrade] = useState(false);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,41 +78,33 @@ export default function AdminUsersPage() {
     const local = getSaasUsers();
     setUsers(local);
 
-    // Sync with Cloud Firestore
-    fetchAllUsersFromFirestore().then((cloudUsers) => {
-      if (cloudUsers && cloudUsers.length > 0) {
+    // Sync with Supabase PostgreSQL & Cloud Firestore
+    Promise.all([
+      fetchUsersFromSupabase().catch(() => []),
+      fetchAllUsersFromFirestore().catch(() => [])
+    ]).then(([supabaseUsers, cloudUsers]) => {
+      const allCloud = [...(supabaseUsers || []), ...(cloudUsers || [])];
+      if (allCloud.length > 0) {
         const mergedMap = new Map<string, User>();
         local.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-        cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), { ...mergedMap.get(u.email.toLowerCase()), ...u }));
+        allCloud.forEach(u => mergedMap.set(u.email.toLowerCase(), { ...mergedMap.get(u.email.toLowerCase()), ...u }));
         const merged = Array.from(mergedMap.values());
         setUsers(merged);
         saveSaasUsers(merged);
       }
-    }).catch(() => {});
+    });
   }, []);
 
-  const isMasterAdmin = currentUser?.role === 'superadmin' || 
-    currentUser?.email?.toLowerCase() === 'danielkiboko218@gmail.com' ||
-    currentUser?.email?.toLowerCase() === 'crm@rayons.net' || 
-    currentUser?.email?.toLowerCase() === 'daniel.kiboko@rayons.net';
+  const isMasterAdmin = currentUser?.role === 'superadmin' || isSuperAdminEmail(currentUser?.email);
+
+  useEffect(() => {
+    if (currentUser && !isMasterAdmin) {
+      router.replace('/campaigns');
+    }
+  }, [currentUser, isMasterAdmin, router]);
 
   if (!isMasterAdmin) {
-    return (
-      <div style={{ maxWidth: '600px', margin: '80px auto', textAlign: 'center', padding: '40px 24px', background: '#0a0a0a', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '4px', background: '#000', border: '1px solid #ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-          <Lock size={22} />
-        </div>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#ffffff', marginBottom: '8px' }}>
-          Accès Restreint au C-Panel Super-Admin
-        </h2>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '24px' }}>
-          Ce module d'administration globale est strictement réservé au Super-Administrateur (Daniel Kiboko).
-        </p>
-        <button onClick={() => router.push('/')} className="btn btn-primary">
-          Retour à mon Espace de Travail
-        </button>
-      </div>
-    );
+    return null;
   }
 
   const showToast = (msg: string) => {
@@ -171,38 +175,92 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleToggleUpgrade = (user: User, upgradeType: 'sms' | 'rcs' | 'linkedin') => {
+    const currentValue = upgradeType === 'sms' ? !!user.hasSmsUpgrade :
+                         upgradeType === 'rcs' ? !!user.hasRcsUpgrade :
+                         !!user.hasLinkedinUpgrade;
+    const newValue = !currentValue;
+    const updated = toggleUserUpgrade(user.id, upgradeType, newValue, 1000);
+    setUsers(updated);
+    const updatedUser = updated.find(u => u.id === user.id);
+    if (updatedUser) {
+      syncUserToFirestore(updatedUser).catch(() => {});
+      syncUserToSupabase(updatedUser).catch(() => {});
+    }
+    showToast(`${newValue ? '🚀' : '🛑'} Upgrade ${upgradeType.toUpperCase()} ${newValue ? 'activé (+1000 crédits)' : 'désactivé'} pour ${user.name} !`);
+  };
+
+  const handleAddCredits = (user: User, channel: 'sms' | 'rcs', count: number) => {
+    const updated = addUserCredits(user.id, channel, count);
+    setUsers(updated);
+    const updatedUser = updated.find(u => u.id === user.id);
+    if (updatedUser) {
+      syncUserToFirestore(updatedUser).catch(() => {});
+      syncUserToSupabase(updatedUser).catch(() => {});
+    }
+    showToast(`💳 +${count} crédits ${channel.toUpperCase()} ajoutés pour ${user.name} !`);
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName || !newEmail || !newPassword) return;
 
-    const isPro = newInitialPlan === 'pro_monthly';
-    const newUserData: User = {
-      id: `user-${Date.now()}`,
-      name: newName.trim(),
-      email: newEmail.trim().toLowerCase(),
-      password: newPassword,
-      companyName: newCompany.trim() || 'Client CRM Rayons',
-      role: 'admin',
-      createdAt: new Date().toISOString(),
-      status: 'active',
-      subscriptionPlan: newInitialPlan,
-      subscriptionPrice: 30,
-      subscriptionStatus: isPro ? 'pro_active' : 'trial_active',
-      trialEndsAt: isPro ? undefined : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      subscriptionExpiresAt: isPro ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : undefined,
-      smppCredits: Number(newSmppCredits) || 500,
-      dailyEmailLimit: 50
-    };
+    try {
+      // 1. Create real Auth user via secondary app (so Admin stays logged in)
+      const secondaryAuth = createAdminSecondaryAppAuth();
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim().toLowerCase(), newPassword);
+      const newUid = userCredential.user.uid;
+      
+      // Sign out the secondary app so it doesn't leak session
+      await signOut(secondaryAuth);
 
-    const created = addSaasUser(newUserData);
-    setUsers(created);
-    syncUserToFirestore(newUserData).catch(() => {});
-    setIsAddingUser(false);
-    setNewName('');
-    setNewEmail('');
-    setNewCompany('');
-    setNewPassword('Client2026!');
-    showToast(`Compte créé avec succès pour ${newUserData.email} avec mot de passe : ${newUserData.password}`);
+      // 2. Prepare user object with the real Firebase UID
+      const isPro = newInitialPlan === 'pro_monthly';
+      const newUserData: User = {
+        id: newUid,
+        name: newName.trim(),
+        email: newEmail.trim().toLowerCase(),
+        password: newPassword,
+        companyName: newCompany.trim() || 'Client CRM Rayons',
+        role: 'client',
+        createdAt: new Date().toISOString(),
+        status: 'active',
+        subscriptionPlan: newInitialPlan,
+        subscriptionPrice: 30,
+        subscriptionStatus: isPro ? 'pro_active' : 'trial_active',
+        trialEndsAt: isPro ? undefined : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        subscriptionExpiresAt: isPro ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+        smppCredits: newHasSmsUpgrade ? (Number(newSmppCredits) || 1000) : 0,
+        rcsCredits: newHasRcsUpgrade ? (Number(newRcsCredits) || 1000) : 0,
+        dailyEmailLimit: 50,
+        hasSmsUpgrade: newHasSmsUpgrade,
+        hasRcsUpgrade: newHasRcsUpgrade,
+        hasLinkedinUpgrade: newHasLinkedinUpgrade
+      };
+
+      // 3. Save to Local & Sync to Supabase + Firestore
+      const created = addSaasUser(newUserData);
+      setUsers(created);
+      await Promise.all([
+        syncUserToFirestore(newUserData).catch(() => {}),
+        syncUserToSupabase(newUserData).catch(() => {})
+      ]);
+      
+      setIsAddingUser(false);
+      setNewName('');
+      setNewEmail('');
+      setNewCompany('');
+      setNewPassword('Client2026!');
+      setNewHasSmsUpgrade(false);
+      setNewHasRcsUpgrade(false);
+      setNewHasLinkedinUpgrade(false);
+      setNewSmppCredits(1000);
+      setNewRcsCredits(1000);
+      showToast(`Compte créé avec succès pour ${newUserData.email} avec mot de passe : ${newUserData.password}`);
+    } catch (error: any) {
+      console.error('Erreur création auth Firebase:', error);
+      alert(`Erreur création utilisateur Firebase : ${error.message}`);
+    }
   };
 
   const handleCopyCredentials = (u: User) => {
@@ -394,25 +452,97 @@ export default function AdminUsersPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label className="label">Formule / Statut d'Abonnement</label>
+                <label className="label">Formule / Statut d'Abonnement Base</label>
                 <select 
                   value={newInitialPlan} 
                   onChange={(e) => setNewInitialPlan(e.target.value as any)} 
                   className="input"
                 >
-                  <option value="trial">Essai Gratuit 7 Jours (Automatique)</option>
-                  <option value="pro_monthly">Abonné Pro Actif (30 $ / mois)</option>
+                  <option value="trial">Essai Gratuit 7 Jours (Email Marketing inclus)</option>
+                  <option value="pro_monthly">Abonné Pro Actif (30 $ / mois - Email inclus)</option>
                 </select>
               </div>
               <div>
-                <label className="label">Crédits SMS / SMPP Dédiés</label>
-                <input 
-                  type="number" 
-                  value={newSmppCredits} 
-                  onChange={(e) => setNewSmppCredits(Number(e.target.value))} 
-                  className="input" 
-                  placeholder="500" 
-                />
+                <label className="label">Canal Inclus par Défaut</label>
+                <div style={{ padding: '10px 12px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid #f59e0b', borderRadius: 'var(--radius-sm)', fontSize: '0.78rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Mail size={15} />
+                  <span>Email Marketing Lemlist Standard (Cold Emailing Inclus)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Options Upgrades Payants */}
+            <div style={{ padding: '14px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={14} color="#facc15" />
+                Upgrades Payants Additionnels Débloqués
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                {/* SMS Upgrade */}
+                <div style={{ padding: '10px', background: newHasSmsUpgrade ? 'rgba(167, 139, 250, 0.08)' : 'transparent', border: newHasSmsUpgrade ? '1px solid #a78bfa' : '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#ffffff' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={newHasSmsUpgrade} 
+                      onChange={e => setNewHasSmsUpgrade(e.target.checked)} 
+                    />
+                    <Smartphone size={14} color="#a78bfa" />
+                    <span>Upgrade SMS (0.036 $)</span>
+                  </label>
+                  {newHasSmsUpgrade && (
+                    <div style={{ marginTop: '8px' }}>
+                      <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Crédits SMS offerts</label>
+                      <input 
+                        type="number" 
+                        value={newSmppCredits} 
+                        onChange={e => setNewSmppCredits(Number(e.target.value))} 
+                        className="input" 
+                        style={{ fontSize: '0.78rem', padding: '4px 8px', marginTop: '2px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* RCS Upgrade */}
+                <div style={{ padding: '10px', background: newHasRcsUpgrade ? 'rgba(52, 211, 153, 0.08)' : 'transparent', border: newHasRcsUpgrade ? '1px solid #34d399' : '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#ffffff' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={newHasRcsUpgrade} 
+                      onChange={e => setNewHasRcsUpgrade(e.target.checked)} 
+                    />
+                    <MessageSquare size={14} color="#34d399" />
+                    <span>Upgrade RCS (0.040 $)</span>
+                  </label>
+                  {newHasRcsUpgrade && (
+                    <div style={{ marginTop: '8px' }}>
+                      <label style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Crédits RCS offerts</label>
+                      <input 
+                        type="number" 
+                        value={newRcsCredits} 
+                        onChange={e => setNewRcsCredits(Number(e.target.value))} 
+                        className="input" 
+                        style={{ fontSize: '0.78rem', padding: '4px 8px', marginTop: '2px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* LinkedIn Upgrade */}
+                <div style={{ padding: '10px', background: newHasLinkedinUpgrade ? 'rgba(56, 189, 248, 0.08)' : 'transparent', border: newHasLinkedinUpgrade ? '1px solid #38bdf8' : '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#ffffff' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={newHasLinkedinUpgrade} 
+                      onChange={e => setNewHasLinkedinUpgrade(e.target.checked)} 
+                    />
+                    <Radio size={14} color="#38bdf8" />
+                    <span>Upgrade LinkedIn (B2B)</span>
+                  </label>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    Automatisation des visites & InMails
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -466,8 +596,8 @@ export default function AdminUsersPage() {
               <tr style={{ background: 'rgba(255,255,255,0.02)', textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }}>
                 <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Utilisateur</th>
                 <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Entreprise</th>
-                <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Statut & Période</th>
-                <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Crédits SMPP</th>
+                <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Statut Licence</th>
+                <th style={{ padding: '12px 18px', color: 'var(--text-muted)' }}>Upgrades Débloqués</th>
                 <th style={{ padding: '12px 18px', color: 'var(--text-muted)', textAlign: 'right' }}>Actions Super-Admin</th>
               </tr>
             </thead>
@@ -531,10 +661,70 @@ export default function AdminUsersPage() {
                       )}
                     </td>
 
+                    {/* UPGRADES STATUS & TOGGLES */}
                     <td style={{ padding: '14px 18px' }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                        {isSuperAdmin ? 'Illimité' : `${u.smppCredits || 500} SMS`}
-                      </span>
+                      {isSuperAdmin ? (
+                        <span style={{ fontSize: '0.72rem', color: '#34d399', fontWeight: 600 }}>Tous canaux illimités</span>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid #f59e0b' }}>
+                              Email (Inclus Base)
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem' }}>
+                            <span className="badge" style={{ fontSize: '0.65rem', background: u.hasSmsUpgrade ? 'rgba(167, 139, 250, 0.15)' : 'rgba(255,255,255,0.05)', color: u.hasSmsUpgrade ? '#a78bfa' : 'var(--text-muted)', border: u.hasSmsUpgrade ? '1px solid #a78bfa' : '1px solid var(--border-subtle)' }}>
+                              SMS : {u.hasSmsUpgrade ? `${u.smppCredits || 0} crédits` : 'Non inclus'}
+                            </span>
+                            <button
+                              onClick={() => handleToggleUpgrade(u, 'sms')}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem', textDecoration: 'underline' }}
+                            >
+                              {u.hasSmsUpgrade ? 'Off' : 'Activer'}
+                            </button>
+                            {u.hasSmsUpgrade && (
+                              <button
+                                onClick={() => handleAddCredits(u, 'sms', 1000)}
+                                style={{ background: 'rgba(167, 139, 250, 0.2)', border: '1px solid #a78bfa', color: '#ffffff', cursor: 'pointer', fontSize: '0.62rem', borderRadius: '3px', padding: '1px 4px' }}
+                                title="Recharger +1000 SMS"
+                              >
+                                +1k SMS
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem' }}>
+                            <span className="badge" style={{ fontSize: '0.65rem', background: u.hasRcsUpgrade ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255,255,255,0.05)', color: u.hasRcsUpgrade ? '#34d399' : 'var(--text-muted)', border: u.hasRcsUpgrade ? '1px solid #34d399' : '1px solid var(--border-subtle)' }}>
+                              RCS : {u.hasRcsUpgrade ? `${u.rcsCredits || 0} crédits` : 'Non inclus'}
+                            </span>
+                            <button
+                              onClick={() => handleToggleUpgrade(u, 'rcs')}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem', textDecoration: 'underline' }}
+                            >
+                              {u.hasRcsUpgrade ? 'Off' : 'Activer'}
+                            </button>
+                            {u.hasRcsUpgrade && (
+                              <button
+                                onClick={() => handleAddCredits(u, 'rcs', 1000)}
+                                style={{ background: 'rgba(52, 211, 153, 0.2)', border: '1px solid #34d399', color: '#ffffff', cursor: 'pointer', fontSize: '0.62rem', borderRadius: '3px', padding: '1px 4px' }}
+                                title="Recharger +1000 RCS"
+                              >
+                                +1k RCS
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem' }}>
+                            <span className="badge" style={{ fontSize: '0.65rem', background: u.hasLinkedinUpgrade ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: u.hasLinkedinUpgrade ? '#38bdf8' : 'var(--text-muted)', border: u.hasLinkedinUpgrade ? '1px solid #38bdf8' : '1px solid var(--border-subtle)' }}>
+                              LinkedIn : {u.hasLinkedinUpgrade ? 'Actif' : 'Non inclus'}
+                            </span>
+                            <button
+                              onClick={() => handleToggleUpgrade(u, 'linkedin')}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem', textDecoration: 'underline' }}
+                            >
+                              {u.hasLinkedinUpgrade ? 'Off' : 'Activer'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     <td style={{ padding: '14px 18px', textAlign: 'right' }}>

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Lead } from '@/types';
+import { cleanPhoneNumber } from '@/lib/phoneUtils';
 
 export interface ParsedLeadResult {
   leads: Partial<Lead>[];
@@ -13,6 +14,11 @@ export interface ParsedLeadResult {
     jobTitle?: string;
     linkedinUrl?: string;
     phone?: string;
+  };
+  phoneStats?: {
+    cleanedCount: number;
+    duplicatesCount: number;
+    carriersCount: Record<string, number>;
   };
 }
 
@@ -39,7 +45,7 @@ export function detectColumnMapping(headers: string[]) {
     company: ['entreprise', 'company', 'societe', 'organisation', 'organization', 'companyname', 'boite'],
     jobTitle: ['poste', 'fonction', 'jobtitle', 'title', 'headline', 'role', 'occupation', 'titre', 'titreduposte'],
     linkedinUrl: ['linkedin', 'linkedinurl', 'profileurl', 'profil', 'url', 'linkedinprofile'],
-    phone: ['phone', 'telephone', 'mobile', 'tel', 'cell', 'portable', 'fixe']
+    phone: ['phone', 'telephone', 'mobile', 'tel', 'cell', 'portable', 'fixe', 'numero', 'numerotel', 'numerotelephone', 'num', 'whatsapp', 'msisdn', 'contacttel']
   };
 
   headers.forEach(originalHeader => {
@@ -129,6 +135,8 @@ export async function parseExcelOrCsvFile(file: File): Promise<ParsedLeadResult>
         const mapping = detectColumnMapping(headers);
 
         const leads: Partial<Lead>[] = [];
+        let cleanedPhoneCount = 0;
+        const carriersCount: Record<string, number> = {};
 
         rawJson.forEach((row, index) => {
           let firstName = mapping.firstName ? String(row[mapping.firstName] || '').trim() : '';
@@ -137,7 +145,24 @@ export async function parseExcelOrCsvFile(file: File): Promise<ParsedLeadResult>
           const company = mapping.company ? String(row[mapping.company] || '').trim() : 'Entreprise';
           const jobTitle = mapping.jobTitle ? String(row[mapping.jobTitle] || '').trim() : 'Décideur';
           const linkedinUrl = mapping.linkedinUrl ? String(row[mapping.linkedinUrl] || '').trim() : '';
-          const phone = mapping.phone ? String(row[mapping.phone] || '').trim() : '';
+          const rawPhone = mapping.phone ? String(row[mapping.phone] || '').trim() : '';
+
+          // Nettoyage et internationalisation automatique du numéro de téléphone (E.164)
+          let phone: string | undefined = undefined;
+          if (rawPhone) {
+            const phoneRes = cleanPhoneNumber(rawPhone, '243');
+            if (phoneRes.isValid) {
+              phone = phoneRes.cleaned;
+              if (phoneRes.cleaned !== rawPhone) {
+                cleanedPhoneCount++;
+              }
+              if (phoneRes.carrier) {
+                carriersCount[phoneRes.carrier] = (carriersCount[phoneRes.carrier] || 0) + 1;
+              }
+            } else {
+              phone = rawPhone;
+            }
+          }
 
           // If no separate first/last name, try to split a full name if available
           if (!firstName && !lastName) {
@@ -166,8 +191,8 @@ export async function parseExcelOrCsvFile(file: File): Promise<ParsedLeadResult>
             }
           });
 
-          // Only keep rows that have at least an email or a name
-          if (email || firstName || lastName) {
+          // Only keep rows that have at least an email, phone, or name
+          if (email || phone || firstName || lastName) {
             leads.push({
               firstName: firstName || 'Contact',
               lastName: lastName || '',
@@ -177,7 +202,7 @@ export async function parseExcelOrCsvFile(file: File): Promise<ParsedLeadResult>
               linkedinUrl: linkedinUrl || undefined,
               phone: phone || undefined,
               customVariables: Object.keys(customVariables).length > 0 ? customVariables : undefined,
-              tags: ['Import Excel LinkedIn']
+              tags: ['Import Excel']
             });
           }
         });
@@ -186,7 +211,12 @@ export async function parseExcelOrCsvFile(file: File): Promise<ParsedLeadResult>
           leads,
           headers,
           totalRows: rawJson.length,
-          mappedColumns: mapping
+          mappedColumns: mapping,
+          phoneStats: {
+            cleanedCount: cleanedPhoneCount,
+            duplicatesCount: 0,
+            carriersCount
+          }
         });
       } catch (err: any) {
         reject(err);

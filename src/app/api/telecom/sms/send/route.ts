@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cleanSmsText, analyzeSmsText } from '@/lib/smsUtils';
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +11,8 @@ export async function POST(req: NextRequest) {
       operatorUrl, 
       authToken,
       leadId,
-      campaignId 
+      campaignId,
+      autoCleanGsm = true
     } = body;
 
     if (!to || !message) {
@@ -20,8 +22,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Direct telecom gateway dispatch
-    // If an operator URL is provided, forward directly to the telecom HTTP/REST SMSC
+    // Traitement des caractères spéciaux :
+    // Si autoCleanGsm est actif, on translitère automatiquement (guillemets courbes, accents non GSM, em-dash, etc.)
+    // pour garantir une compatibilité 100% avec les passerelles SMPP/SMSC et préserver le quota de 160 car./SMS.
+    const effectiveMessage = autoCleanGsm ? cleanSmsText(message) : message;
+    const analysis = analyzeSmsText(effectiveMessage);
+
+    // Envoi réel vers la passerelle opérateur si configurée
     let operatorResponse = null;
     if (operatorUrl) {
       try {
@@ -34,7 +41,9 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             from: senderId,
             to,
-            text: message,
+            text: effectiveMessage,
+            encoding: analysis.encoding,
+            parts: analysis.partsCount,
             timestamp: new Date().toISOString()
           })
         });
@@ -52,7 +61,13 @@ export async function POST(req: NextRequest) {
       messageId,
       senderId,
       recipient: to,
-      partsCount: Math.ceil(message.length / 160) || 1,
+      originalLength: message.length,
+      finalLength: effectiveMessage.length,
+      finalMessage: effectiveMessage,
+      encoding: analysis.encoding,
+      isGsm7: analysis.isGsm7,
+      partsCount: analysis.partsCount,
+      autoCleaned: autoCleanGsm && effectiveMessage !== message,
       operatorResponse,
       timestamp: new Date().toISOString()
     });
