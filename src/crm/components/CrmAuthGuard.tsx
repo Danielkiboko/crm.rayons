@@ -5,35 +5,24 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Layers } from 'lucide-react';
 
-export default function AuthGuard({ children }: { children: React.ReactNode }) {
+export default function CrmAuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
-  const isCpanelRoute = pathname.startsWith('/cpanel');
-  const isCpanelLoginPage = pathname === '/cpanel/login';
-  const isCrmLoginPage = pathname === '/login';
-  const isLoginPage = isCrmLoginPage || isCpanelLoginPage;
+  const isLoginPage = pathname === '/login' || pathname === '/cpanel/login';
 
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated && !isLoginPage) {
-        if (isCpanelRoute) {
-          router.push('/cpanel/login');
-        } else {
-          router.push('/login');
-        }
-      } else if (isAuthenticated) {
-        if (isCpanelLoginPage) {
-          router.push('/cpanel/agents');
-        } else if (isCrmLoginPage) {
-          router.push('/campaigns');
-        }
+        router.push('/login');
+      } else if (isAuthenticated && pathname === '/login') {
+        router.push('/campaigns');
       }
     }
-  }, [isAuthenticated, isLoading, isLoginPage, isCpanelRoute, isCpanelLoginPage, isCrmLoginPage, router]);
+  }, [isAuthenticated, isLoading, isLoginPage, pathname, router]);
 
-  // If loading session state, display sleek loader
+  // Chargement
   if (isLoading) {
     return (
       <div style={{
@@ -59,18 +48,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           <Layers size={24} />
         </div>
         <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Vérification des accès sécurisés...
+          Vérification de session CRM...
         </div>
       </div>
     );
   }
 
-  // If on login page and not authenticated, render login
+  // Pages de connexion
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  // If user is suspended / blocked by Super-Admin
+  // Compte suspendu par l'admin cPanel
   if (isAuthenticated && user?.status === 'suspended') {
     return (
       <div style={{
@@ -105,10 +94,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             <Layers size={24} />
           </div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', marginBottom: '8px' }}>
-            Compte Suspendu
+            Compte Suspendu par l'Administration
           </h2>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '24px' }}>
-            Votre accès au CRM SaaS a été temporairement suspendu ou bloqué par l'administrateur. Veuillez contacter <span style={{ color: '#ffffff', textDecoration: 'underline' }}>crm@rayons.net</span> pour débloquer votre compte.
+            Votre accès au CRM a été temporairement suspendu par le Super-Administrateur cPanel. Veuillez contacter <span style={{ color: '#ffffff', textDecoration: 'underline' }}>crm@rayons.net</span> pour régulariser votre compte.
           </p>
           <button onClick={logout} className="btn btn-secondary" style={{ width: '100%' }}>
             Se Déconnecter
@@ -118,11 +107,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If authenticated and on protected route, render layout & content
   if (isAuthenticated) {
     return <>{children}</>;
   }
 
-  // Fallback while redirecting
   return null;
 }

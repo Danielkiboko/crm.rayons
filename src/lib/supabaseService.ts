@@ -72,6 +72,21 @@ export async function syncUserToSupabase(user: User): Promise<boolean> {
   }
 }
 
+export async function deleteUserFromSupabase(userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false;
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    if (error) {
+      console.error('Supabase deleteUser error:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Supabase deleteUser error:', err);
+    return false;
+  }
+}
+
 // ================= LEADS =================
 
 export async function fetchLeadsFromSupabase(): Promise<Lead[]> {

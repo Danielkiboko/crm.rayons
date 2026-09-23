@@ -17,6 +17,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import Link from 'next/link';
 import { auth } from '@/lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
@@ -97,7 +98,7 @@ export default function LoginPage() {
             CRM RAYONS
           </h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Plateforme SMPP, RCS & Emailing SaaS All-in-One
+            Espace Client & Outils d'Outreach
           </p>
         </div>
 
@@ -328,8 +329,34 @@ export default function LoginPage() {
         </form>
 
 
+        {/* Switch to cPanel Admin */}
+        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            Vous êtes administrateur du système ?
+          </p>
+          <Link
+            href="/cpanel/login"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.78rem',
+              color: '#ef4444',
+              fontWeight: 600,
+              textDecoration: 'none',
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              background: 'rgba(239, 68, 68, 0.05)'
+            }}
+          >
+            <ShieldCheck size={14} color="#ef4444" />
+            Accéder au cPanel Super-Admin
+          </Link>
+        </div>
+
         {/* Security badge footer */}
-        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ marginTop: '16px', paddingTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.68rem', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           <ShieldCheck size={13} />
           Accès SaaS Sécurisé & Données Cloisonnées
         </div>
