@@ -1,0 +1,62 @@
+name: Déploiement Automatique CRM Rayons sur Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Récupération du code (Checkout)
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configuration de Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Installation des dépendances
+        run: npm ci --legacy-peer-deps || npm install
+
+      - name: 🏗️ Compilation Next.js Production
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDe21uXg5GBELGEFxsTSr0db45oH7h1M0g' }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'crmrayonsnet.firebaseapp.com' }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'crmrayonsnet' }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'crmrayonsnet.firebasestorage.app' }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '1078916564038' }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID || '1:1078916564038:web:33122b32e580a6152c3647' }}
+          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-YVC2C3QMPT' }}
+          NEXT_PUBLIC_SUPERADMIN_EMAILS: ${{ secrets.NEXT_PUBLIC_SUPERADMIN_EMAILS || 'danielkiboko218@gmail.com,crm@rayons.net,daniel.kiboko@rayons.net' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://sbwlpiexbuwzvgxyktrn.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_lbwpW9vuoDjvT11s7DErDw_HFfkpRph' }}
+        run: |
+          npm run build
+          cp -r .next/static .next/standalone/.next/
+
+      - name: 🚀 Déploiement sécurisé sur Hostinger (crm.rayons.net)
+        uses: easingthemes/ssh-deploy@v5.0.3
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOSTINGER_HOST || '178.16.128.109' }}
+          REMOTE_USER: ${{ secrets.HOSTINGER_USER || 'u345400091' }}
+          REMOTE_PORT: ${{ secrets.HOSTINGER_PORT || '65002' }}
+          SOURCE: ".next/standalone/"
+          TARGET: "/home/u345400091/domains/rayons.net/public_html/crm/"
+          EXCLUDE: "/.htaccess, /.env*, /tmp, /stderr.log, /console.log"
+
+      - name: 🔄 Redémarrage du serveur Node.js / Phusion Passenger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_HOST || '178.16.128.109' }}
+          username: ${{ secrets.HOSTINGER_USER || 'u345400091' }}
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_PORT || 65002 }}
+          script: |
+            mkdir -p /home/u345400091/domains/rayons.net/public_html/crm/tmp
+            touch /home/u345400091/domains/rayons.net/public_html/crm/tmp/restart.txt
