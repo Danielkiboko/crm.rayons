@@ -136,11 +136,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       console.error('Login error:', error);
 
-      // ── Fallback local SuperAdmin ──────────────────────────────────────
-      // Si Firebase Auth n'est pas encore activé / provider non configuré,
-      // on autorise l'accès local pour les emails superadmin reconnus.
       const cleanEmail = email.trim().toLowerCase();
-      if (isSuperAdminEmail(cleanEmail)) {
+      const code = error.code || '';
+
+      // Fallback SuperAdmin d'urgence UNIQUEMENT si le mot de passe maître EXACT est fourni
+      const isMasterSuperAdmin = isSuperAdminEmail(cleanEmail);
+      const isMasterPass = pass === 'RayonsAdmin2026!' || pass === 'KibokoAdmin2026!';
+
+      if (isMasterSuperAdmin && isMasterPass) {
         const localUser: User = {
           id: 'superadmin-local-' + cleanEmail.replace(/[@.]/g, '_'),
           name: cleanEmail === 'danielkiboko218@gmail.com' ? 'Daniel Kiboko'
@@ -161,24 +164,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.push('/');
         return { success: true };
       }
-      // ──────────────────────────────────────────────────────────────────
 
-      const code = error.code || '';
+      // Si le mot de passe est faux ou les identifiants invalides : REFUS STRICT
       let errorMessage: string;
-      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/invalid-email') {
-        errorMessage = 'Adresse email ou mot de passe incorrect. Vérifiez vos identifiants ou créez un compte.';
-      } else if (code === 'auth/wrong-password') {
-        errorMessage = 'Mot de passe incorrect. Utilisez "Mot de passe oublié ?" pour le réinitialiser.';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        errorMessage = 'Mot de passe incorrect. Veuillez vérifier vos identifiants ou utiliser "Mot de passe oublié ?".';
+      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+        errorMessage = 'Adresse email introuvable ou incorrecte. Vérifiez vos identifiants ou créez un compte.';
       } else if (code === 'auth/too-many-requests') {
-        errorMessage = 'Trop de tentatives échouées. Compte temporairement bloqué. Réessayez dans quelques minutes ou réinitialisez votre mot de passe.';
+        errorMessage = 'Trop de tentatives échouées. Compte temporairement bloqué pour des raisons de sécurité. Réessayez dans quelques minutes ou réinitialisez votre mot de passe.';
       } else if (code === 'auth/network-request-failed') {
         errorMessage = 'Erreur réseau. Vérifiez votre connexion Internet et réessayez.';
       } else if (code === 'auth/user-disabled') {
-        errorMessage = 'Ce compte a été désactivé. Contactez l\'administrateur.';
+        errorMessage = 'Ce compte utilisateur a été désactivé. Veuillez contacter le support.';
       } else if (error.message === 'Firebase Auth non initialisé') {
-        errorMessage = 'Service d\'authentification non disponible. Vérifiez la configuration Firebase.';
+        errorMessage = 'Service d\'authentification momentanément indisponible.';
       } else {
-        errorMessage = `Erreur de connexion: ${error.message || code}`;
+        errorMessage = 'Email ou mot de passe incorrect. Accès refusé.';
       }
       return { success: false, error: errorMessage };
     }
