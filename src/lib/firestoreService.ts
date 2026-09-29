@@ -8,10 +8,21 @@ import {
   query, 
   where,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
-import { User, Lead, Campaign, UniboxMessage } from '@/types';
+import { 
+  User, 
+  Lead, 
+  Campaign, 
+  UniboxMessage, 
+  Deal, 
+  EmailAccount, 
+  WarmupConfig, 
+  LinkedinAccount 
+} from '@/types';
 
 /**
  * Service d'interaction Cloud Firestore pour CRM Rayons SaaS.
@@ -138,6 +149,17 @@ export async function fetchLeadsFromFirestore(userId: string): Promise<Lead[]> {
   }
 }
 
+export async function deleteLeadFromFirestore(userId: string, leadId: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !leadId) return false;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'leads', leadId));
+    return true;
+  } catch (error) {
+    console.error('Firestore deleteLead error:', error);
+    return false;
+  }
+}
+
 // ================= CAMPAIGNS =================
 
 export async function syncCampaignsToFirestore(userId: string, campaigns: Campaign[]): Promise<boolean> {
@@ -172,7 +194,164 @@ export async function fetchCampaignsFromFirestore(userId: string): Promise<Campa
   }
 }
 
+export async function deleteCampaignFromFirestore(userId: string, campaignId: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !campaignId) return false;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'campaigns', campaignId));
+    return true;
+  } catch (error) {
+    console.error('Firestore deleteCampaign error:', error);
+    return false;
+  }
+}
+
+// ================= DEALS (PIPELINE DES VENTES) =================
+
+export async function syncDealsToFirestore(userId: string, deals: Deal[]): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId) return false;
+  try {
+    const dealsCol = collection(db, 'users', userId, 'deals');
+    const chunks = chunkArray(deals, BATCH_LIMIT);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const d of chunk) {
+        batch.set(doc(dealsCol, d.id), d, { merge: true });
+      }
+      await batch.commit();
+    }
+    return true;
+  } catch (error) {
+    console.error('Firestore syncDeals error:', error);
+    return false;
+  }
+}
+
+export async function fetchDealsFromFirestore(userId: string): Promise<Deal[]> {
+  if (!isFirebaseConfigured || !db || !userId) return [];
+  try {
+    const dealsCol = collection(db, 'users', userId, 'deals');
+    const snap = await getDocs(dealsCol);
+    return snap.docs.map(doc => doc.data() as Deal);
+  } catch (error) {
+    console.error('Firestore fetchDeals error:', error);
+    return [];
+  }
+}
+
+export async function saveDealToFirestore(userId: string, deal: Deal): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !deal?.id) return false;
+  try {
+    const dealRef = doc(db, 'users', userId, 'deals', deal.id);
+    await setDoc(dealRef, deal, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Firestore saveDeal error:', error);
+    return false;
+  }
+}
+
+export async function deleteDealFromFirestore(userId: string, dealId: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !dealId) return false;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'deals', dealId));
+    return true;
+  } catch (error) {
+    console.error('Firestore deleteDeal error:', error);
+    return false;
+  }
+}
+
+// ================= EMAIL ACCOUNTS (SMTP / IMAP) =================
+
+export async function syncEmailAccountsToFirestore(userId: string, accounts: EmailAccount[]): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId) return false;
+  try {
+    const accsCol = collection(db, 'users', userId, 'emailAccounts');
+    const chunks = chunkArray(accounts, BATCH_LIMIT);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const acc of chunk) {
+        batch.set(doc(accsCol, acc.id), acc, { merge: true });
+      }
+      await batch.commit();
+    }
+    return true;
+  } catch (error) {
+    console.error('Firestore syncEmailAccounts error:', error);
+    return false;
+  }
+}
+
+export async function fetchEmailAccountsFromFirestore(userId: string): Promise<EmailAccount[]> {
+  if (!isFirebaseConfigured || !db || !userId) return [];
+  try {
+    const accsCol = collection(db, 'users', userId, 'emailAccounts');
+    const snap = await getDocs(accsCol);
+    return snap.docs.map(doc => doc.data() as EmailAccount);
+  } catch (error) {
+    console.error('Firestore fetchEmailAccounts error:', error);
+    return [];
+  }
+}
+
+export async function saveEmailAccountToFirestore(userId: string, account: EmailAccount): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !account?.id) return false;
+  try {
+    const accRef = doc(db, 'users', userId, 'emailAccounts', account.id);
+    await setDoc(accRef, account, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Firestore saveEmailAccount error:', error);
+    return false;
+  }
+}
+
+export async function deleteEmailAccountFromFirestore(userId: string, accountId: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !accountId) return false;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'emailAccounts', accountId));
+    return true;
+  } catch (error) {
+    console.error('Firestore deleteEmailAccount error:', error);
+    return false;
+  }
+}
+
 // ================= MESSAGES (UNIBOX) =================
+
+export async function syncMessagesToFirestore(userId: string, messages: UniboxMessage[]): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId) return false;
+  try {
+    const msgCol = collection(db, 'users', userId, 'messages');
+    const chunks = chunkArray(messages, BATCH_LIMIT);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const m of chunk) {
+        batch.set(doc(msgCol, m.id), m, { merge: true });
+      }
+      await batch.commit();
+    }
+    return true;
+  } catch (error) {
+    console.error('Firestore syncMessages error:', error);
+    return false;
+  }
+}
+
+export async function fetchMessagesFromFirestore(userId: string): Promise<UniboxMessage[]> {
+  if (!isFirebaseConfigured || !db || !userId) return [];
+  try {
+    const msgCol = collection(db, 'users', userId, 'messages');
+    const snap = await getDocs(msgCol);
+    return snap.docs.map(doc => doc.data() as UniboxMessage);
+  } catch (error) {
+    console.error('Firestore fetchMessages error:', error);
+    return [];
+  }
+}
 
 export async function saveMessageToFirestore(userId: string, message: UniboxMessage): Promise<boolean> {
   if (!isFirebaseConfigured || !db || !userId) return false;
@@ -183,5 +362,79 @@ export async function saveMessageToFirestore(userId: string, message: UniboxMess
   } catch (error) {
     console.error('Firestore saveMessage error:', error);
     return false;
+  }
+}
+
+export async function deleteMessageFromFirestore(userId: string, messageId: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId || !messageId) return false;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'messages', messageId));
+    return true;
+  } catch (error) {
+    console.error('Firestore deleteMessage error:', error);
+    return false;
+  }
+}
+
+// ================= USER SETTINGS (WARMUP & LINKEDIN) =================
+
+export async function syncUserSettingsToFirestore(
+  userId: string, 
+  settings: { warmupConfig?: WarmupConfig; linkedinAccount?: LinkedinAccount | null }
+): Promise<boolean> {
+  if (!isFirebaseConfigured || !db || !userId) return false;
+  try {
+    const userRef = doc(db, 'users', userId);
+    await setDoc(userRef, {
+      ...settings,
+      settingsUpdatedAt: serverTimestamp()
+    }, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Firestore syncUserSettings error:', error);
+    return false;
+  }
+}
+
+export async function fetchUserSettingsFromFirestore(
+  userId: string
+): Promise<{ warmupConfig?: WarmupConfig; linkedinAccount?: LinkedinAccount | null } | null> {
+  if (!isFirebaseConfigured || !db || !userId) return null;
+  try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      return {
+        warmupConfig: data.warmupConfig,
+        linkedinAccount: data.linkedinAccount
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Firestore fetchUserSettings error:', error);
+    return null;
+  }
+}
+
+// ================= REAL-TIME SNAPSHOT LISTENERS =================
+
+export function subscribeToFirestoreSubcollection<T>(
+  userId: string,
+  subcollection: 'leads' | 'campaigns' | 'messages' | 'deals' | 'emailAccounts',
+  callback: (items: T[]) => void
+): Unsubscribe | null {
+  if (!isFirebaseConfigured || !db || !userId) return null;
+  try {
+    const colRef = collection(db, 'users', userId, subcollection);
+    return onSnapshot(colRef, (snap) => {
+      const items = snap.docs.map(d => d.data() as T);
+      callback(items);
+    }, (err) => {
+      console.warn(`Firestore listener error on ${subcollection}:`, err.message);
+    });
+  } catch (e) {
+    console.warn(`Failed to create Firestore listener on ${subcollection}:`, e);
+    return null;
   }
 }

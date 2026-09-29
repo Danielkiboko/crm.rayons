@@ -18,8 +18,21 @@ import { verifyEmailAddress } from '@/lib/emailVerifier';
 import { 
   syncLeadsToFirestore, 
   fetchLeadsFromFirestore, 
+  deleteLeadFromFirestore,
   syncCampaignsToFirestore, 
-  fetchCampaignsFromFirestore 
+  fetchCampaignsFromFirestore,
+  deleteCampaignFromFirestore,
+  syncDealsToFirestore,
+  fetchDealsFromFirestore,
+  deleteDealFromFirestore,
+  syncEmailAccountsToFirestore,
+  fetchEmailAccountsFromFirestore,
+  deleteEmailAccountFromFirestore,
+  syncMessagesToFirestore,
+  fetchMessagesFromFirestore,
+  deleteMessageFromFirestore,
+  syncUserSettingsToFirestore,
+  fetchUserSettingsFromFirestore
 } from '@/lib/firestoreService';
 import { deduplicateAndCleanLeads, DeduplicationOptions, DeduplicationResult } from '@/lib/phoneUtils';
 
@@ -217,6 +230,46 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         setCampaigns(cleanCloudCampaigns);
       }
     }).catch(() => {});
+
+    fetchDealsFromFirestore(uid).then(cloudDeals => {
+      if (cloudDeals && cloudDeals.length > 0) {
+        const cleanCloudDeals = cloudDeals.filter(d => 
+          !d.id.startsWith('deal-') && 
+          !['Doctolib', 'Alan', 'Spendesk', 'PayFit'].includes(d.company)
+        );
+        setDeals(cleanCloudDeals);
+      }
+    }).catch(() => {});
+
+    fetchEmailAccountsFromFirestore(uid).then(cloudAccounts => {
+      if (cloudAccounts && cloudAccounts.length > 0) {
+        const cleanCloudAccounts = cloudAccounts.filter(a => 
+          a.id !== 'acc-placeholder-default' && 
+          a.email !== 'votremail@votredomaine.com'
+        );
+        setEmailAccounts(cleanCloudAccounts);
+      }
+    }).catch(() => {});
+
+    fetchMessagesFromFirestore(uid).then(cloudMessages => {
+      if (cloudMessages && cloudMessages.length > 0) {
+        const cleanCloudMessages = cloudMessages.filter(m => 
+          !m.id.startsWith('msg-') && 
+          !m.id.startsWith('reply-') && 
+          m.leadEmail !== 'claire.martin@lemlist.com'
+        );
+        setMessages(cleanCloudMessages);
+      }
+    }).catch(() => {});
+
+    fetchUserSettingsFromFirestore(uid).then(settings => {
+      if (settings?.warmupConfig) {
+        setWarmupConfig(settings.warmupConfig);
+      }
+      if (settings?.linkedinAccount) {
+        setLinkedinAccount(settings.linkedinAccount);
+      }
+    }).catch(() => {});
   }, [user?.id]);
 
   // Save to tenant-isolated localStorage & Cloud Firestore on change
@@ -237,30 +290,35 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoaded && user?.id) {
       setStoredData(getTenantKey('unibox', user.id), messages);
+      syncMessagesToFirestore(user.id, messages).catch(() => {});
     }
   }, [messages, isLoaded, user?.id]);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       setStoredData(getTenantKey('deals', user.id), deals);
+      syncDealsToFirestore(user.id, deals).catch(() => {});
     }
   }, [deals, isLoaded, user?.id]);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       setStoredData(getTenantKey('warmup', user.id), warmupConfig);
+      syncUserSettingsToFirestore(user.id, { warmupConfig, linkedinAccount }).catch(() => {});
     }
   }, [warmupConfig, isLoaded, user?.id]);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       setStoredData(getTenantKey('email_accounts', user.id), emailAccounts);
+      syncEmailAccountsToFirestore(user.id, emailAccounts).catch(() => {});
     }
   }, [emailAccounts, isLoaded, user?.id]);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       setStoredData(getTenantKey('linkedin_account', user.id), linkedinAccount);
+      syncUserSettingsToFirestore(user.id, { warmupConfig, linkedinAccount }).catch(() => {});
     }
   }, [linkedinAccount, isLoaded, user?.id]);
 
@@ -287,6 +345,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const deleteCampaign = (id: string) => {
     setCampaigns(prev => prev.filter(c => c.id !== id));
+    if (user?.id) deleteCampaignFromFirestore(user.id, id).catch(() => {});
   };
 
   const toggleCampaignStatus = (id: string) => {
@@ -448,6 +507,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const deleteLead = (id: string) => {
     setLeads(prev => prev.filter(l => l.id !== id));
+    if (user?.id) deleteLeadFromFirestore(user.id, id).catch(() => {});
   };
 
   const verifyLeadEmail = async (id: string) => {
@@ -570,6 +630,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const deleteDeal = (dealId: string) => {
     setDeals(prev => prev.filter(d => d.id !== dealId));
+    if (user?.id) deleteDealFromFirestore(user.id, dealId).catch(() => {});
   };
 
   // Warmup methods
@@ -617,6 +678,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const deleteEmailAccount = (id: string) => {
     setEmailAccounts(prev => prev.filter(a => a.id !== id));
+    if (user?.id) deleteEmailAccountFromFirestore(user.id, id).catch(() => {});
   };
 
   const setDefaultEmailAccount = (id: string) => {
