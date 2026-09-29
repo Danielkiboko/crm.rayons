@@ -263,6 +263,24 @@ export default function AdminUsersPage() {
         syncUserToFirestore(newUserData).catch(() => {}),
         syncUserToSupabase(newUserData).catch(() => {})
       ]);
+
+      // 4. Send Welcome Email with Credentials to the user
+      try {
+        await fetch('/api/auth/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newUserData.name,
+            email: newUserData.email,
+            password: newUserData.password,
+            company: newUserData.companyName,
+            plan: newUserData.subscriptionPlan,
+            loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://crm.rayons.net/login'
+          })
+        });
+      } catch (e) {
+        console.warn('Welcome email error:', e);
+      }
       
       setIsAddingUser(false);
       setNewName('');
@@ -274,7 +292,7 @@ export default function AdminUsersPage() {
       setNewHasLinkedinUpgrade(false);
       setNewSmppCredits(1000);
       setNewRcsCredits(1000);
-      showToast(`Compte créé avec succès pour ${newUserData.email} avec mot de passe : ${newUserData.password}`);
+      showToast(`Compte créé et e-mail d'accès envoyé à ${newUserData.email} !`);
     } catch (error: any) {
       console.error('Erreur création auth Firebase:', error);
       alert(`Erreur création utilisateur Firebase : ${error.message}`);

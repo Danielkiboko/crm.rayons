@@ -217,6 +217,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       await syncUserToFirestore(newUser);
+
+      // Trigger Welcome Email in background
+      try {
+        fetch('/api/auth/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newUser.name,
+            email: newUser.email,
+            company: newUser.companyName,
+            plan: newUser.subscriptionPlan,
+            loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://crm.rayons.net/login'
+          })
+        }).catch(() => {});
+      } catch (e) {}
       
       setUser(newUser);
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
