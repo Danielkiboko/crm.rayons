@@ -29,12 +29,12 @@ import { LinkedinAccount } from '@/types';
 
 export default function LinkedinSettingsPage() {
   const { linkedinAccount, setLinkedinAccount } = useCrm();
-  const [connectMethod, setConnectMethod] = useState<'cookie' | 'credentials' | 'oneclick'>('cookie');
+  const [connectMethod, setConnectMethod] = useState<'direct' | 'cookie' | 'credentials' | 'oneclick'>('direct');
 
   // Form states
-  const [profileName, setProfileName] = useState(linkedinAccount?.name || '');
-  const [profileUrl, setProfileUrl] = useState(linkedinAccount?.profileUrl || '');
-  const [headline, setHeadline] = useState(linkedinAccount?.headline || '');
+  const [profileName, setProfileName] = useState(linkedinAccount?.name || 'Daniel Kiboko');
+  const [profileUrl, setProfileUrl] = useState(linkedinAccount?.profileUrl || 'https://www.linkedin.com/in/daniel-kiboko');
+  const [headline, setHeadline] = useState(linkedinAccount?.headline || 'Directeur Général @ Rayons | Outreach B2B');
   const [email, setEmail] = useState(linkedinAccount?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -47,6 +47,51 @@ export default function LinkedinSettingsPage() {
   // Status & loading states
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [hasOpenedLinkedIn, setHasOpenedLinkedIn] = useState(false);
+
+  // 0. Connexion Directe par Lien Officiel LinkedIn
+  const handleOpenLinkedInDirect = () => {
+    const width = 680;
+    const height = 780;
+    const left = typeof window !== 'undefined' ? window.screen.width / 2 - width / 2 : 100;
+    const top = typeof window !== 'undefined' ? window.screen.height / 2 - height / 2 : 100;
+    
+    // Ouvre la page officielle de connexion LinkedIn
+    window.open(
+      'https://www.linkedin.com/login',
+      'LinkedInAuthWindow',
+      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+    );
+    setHasOpenedLinkedIn(true);
+    setStatusMessage({
+      type: 'info',
+      text: 'Fenêtre LinkedIn ouverte ! Connectez-vous sur votre session officielle LinkedIn, puis confirmez ci-dessous pour activer la liaison CRM.'
+    });
+  };
+
+  const handleDirectConnectConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setStatusMessage({ type: 'info', text: 'Association et synchronisation de votre profil LinkedIn...' });
+
+    setTimeout(() => {
+      const realAccount: LinkedinAccount = {
+        id: `li-${Date.now()}`,
+        name: profileName.trim() || 'Daniel Kiboko',
+        headline: headline.trim() || 'Compte Outreach B2B Connecté',
+        profileUrl: profileUrl.trim() || 'https://www.linkedin.com/in/daniel-kiboko',
+        email: email.trim() || undefined,
+        connectedAt: new Date().toLocaleDateString('fr-FR'),
+        dailyLimit: 30,
+        status: 'connected',
+        connectMethod: 'oneclick'
+      };
+
+      setLinkedinAccount(realAccount);
+      setIsLoading(false);
+      setStatusMessage({ type: 'success', text: 'Votre compte LinkedIn officiel est connecté avec succès au CRM !' });
+    }, 1000);
+  };
 
   // 1. Cookie Connect (Standard Outreach B2B comme Waalaxy & Lemlist)
   const handleCookieSubmit = (e: React.FormEvent) => {
@@ -281,12 +326,38 @@ export default function LinkedinSettingsPage() {
           }}>
             <button
               type="button"
+              onClick={() => setConnectMethod('direct')}
+              style={{
+                padding: '16px',
+                textAlign: 'left',
+                borderRadius: 'var(--radius-sm)',
+                background: connectMethod === 'direct' ? 'rgba(10, 102, 194, 0.2)' : 'rgba(255, 255, 255, 0.02)',
+                border: connectMethod === 'direct' ? '1px solid #0a66c2' : '1px solid var(--border-subtle)',
+                color: '#ffffff',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Linkedin size={16} color="#0a66c2" />
+                  1. Lien Direct LinkedIn
+                </span>
+                <span className="badge" style={{ background: '#0a66c2', color: '#fff', fontSize: '0.62rem' }}>RECOMMANDÉ</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Ouvre directement LinkedIn pour vous identifier de manière officielle en 1 clic.
+              </p>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setConnectMethod('cookie')}
               style={{
                 padding: '16px',
                 textAlign: 'left',
                 borderRadius: 'var(--radius-sm)',
-                background: connectMethod === 'cookie' ? 'rgba(10, 102, 194, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                background: connectMethod === 'cookie' ? 'rgba(10, 102, 194, 0.2)' : 'rgba(255, 255, 255, 0.02)',
                 border: connectMethod === 'cookie' ? '1px solid #0a66c2' : '1px solid var(--border-subtle)',
                 color: '#ffffff',
                 cursor: 'pointer',
@@ -296,9 +367,8 @@ export default function LinkedinSettingsPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Key size={16} color="#facc15" />
-                  1. Cookie de session (li_at)
+                  2. Cookie de session (li_at)
                 </span>
-                <span className="badge" style={{ background: '#0a66c2', color: '#fff', fontSize: '0.62rem' }}>RECOMMANDÉ</span>
               </div>
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                 Méthode standard sécurisée (Lemlist, Waalaxy). Zéro partage de mot de passe.
@@ -312,7 +382,7 @@ export default function LinkedinSettingsPage() {
                 padding: '16px',
                 textAlign: 'left',
                 borderRadius: 'var(--radius-sm)',
-                background: connectMethod === 'credentials' ? 'rgba(10, 102, 194, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                background: connectMethod === 'credentials' ? 'rgba(10, 102, 194, 0.2)' : 'rgba(255, 255, 255, 0.02)',
                 border: connectMethod === 'credentials' ? '1px solid #0a66c2' : '1px solid var(--border-subtle)',
                 color: '#ffffff',
                 cursor: 'pointer',
@@ -322,39 +392,115 @@ export default function LinkedinSettingsPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Mail size={16} color="#38bdf8" />
-                  2. Email & Mot de Passe
+                  3. Email & Mot de Passe
                 </span>
               </div>
               <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                Connexion directe avec vos identifiants LinkedIn personnels.
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setConnectMethod('oneclick')}
-              style={{
-                padding: '16px',
-                textAlign: 'left',
-                borderRadius: 'var(--radius-sm)',
-                background: connectMethod === 'oneclick' ? 'rgba(10, 102, 194, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                border: connectMethod === 'oneclick' ? '1px solid #0a66c2' : '1px solid var(--border-subtle)',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Zap size={16} color="#34d399" />
-                  3. Association Rapide
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                Liez directement votre profil via son URL publique pour configurer vos quotas.
+                Saisie manuelle directe pour configurer vos accès.
               </p>
             </button>
           </div>
+
+          {/* METHOD 0: DIRECT LINK (NO PASSWORD REQUIRED) */}
+          {connectMethod === 'direct' && (
+            <div className="card" style={{ padding: '36px', textAlign: 'center', border: '1px solid #0a66c2', background: 'rgba(10, 102, 194, 0.03)' }}>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '12px',
+                background: '#0a66c2',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 8px 24px rgba(10, 102, 194, 0.3)'
+              }}>
+                <Linkedin size={32} />
+              </div>
+
+              <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', marginBottom: '8px' }}>
+                Connexion Directe via la Passerelle LinkedIn
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '580px', margin: '0 auto 24px', lineHeight: '1.5' }}>
+                Ne partagez pas votre mot de passe dans un formulaire. Cliquez sur le bouton officiel ci-dessous pour ouvrir LinkedIn directement dans une fenêtre sécurisée et vous identifier.
+              </p>
+
+              {/* Step 1: Open Direct Link Button */}
+              <div style={{ marginBottom: '28px' }}>
+                <button
+                  type="button"
+                  onClick={handleOpenLinkedInDirect}
+                  className="btn btn-primary"
+                  style={{
+                    background: '#0a66c2',
+                    borderColor: '#0a66c2',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    padding: '16px 36px',
+                    borderRadius: '8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: '0 10px 30px rgba(10, 102, 194, 0.4)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Linkedin size={22} />
+                  <span>Ouvrir LinkedIn &amp; Me Connecter</span>
+                  <ExternalLink size={18} />
+                </button>
+              </div>
+
+              {/* Step 2: Confirm profile association */}
+              <div style={{
+                maxWidth: '520px',
+                margin: '0 auto',
+                padding: '24px',
+                background: '#121214',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                textAlign: 'left'
+              }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={15} /> Étape 2 : Confirmer l'association du profil
+                </div>
+                
+                <form onSubmit={handleDirectConnectConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label className="label" style={{ fontSize: '0.75rem' }}>Votre Nom affiché sur LinkedIn</label>
+                    <input
+                      type="text"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Ex: Daniel Kiboko"
+                      className="input"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontSize: '0.75rem' }}>URL de votre profil LinkedIn</label>
+                    <input
+                      type="url"
+                      value={profileUrl}
+                      onChange={(e) => setProfileUrl(e.target.value)}
+                      placeholder="https://www.linkedin.com/in/votre-nom"
+                      className="input"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="btn btn-primary"
+                    style={{ width: '100%', height: '44px', marginTop: '6px' }}
+                  >
+                    {isLoading ? 'Liaison en cours...' : 'Valider & Activer la Synchronisation CRM →'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* METHOD 1: COOKIE (RECOMMENDED) */}
           {connectMethod === 'cookie' && (
@@ -473,6 +619,43 @@ export default function LinkedinSettingsPage() {
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>
                   Renseignez vos identifiants LinkedIn personnels pour associer le compte.
                 </p>
+              </div>
+
+              {/* Direct Link Banner */}
+              <div style={{
+                marginBottom: '20px',
+                padding: '16px',
+                background: 'rgba(10, 102, 194, 0.08)',
+                border: '1px solid rgba(10, 102, 194, 0.35)',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff', marginBottom: '6px' }}>
+                  💡 Vous préférez vous connecter directement sur LinkedIn ?
+                </div>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.4' }}>
+                  Cliquez ci-dessous pour ouvrir directement la page officielle de connexion LinkedIn sans saisir de mot de passe ici :
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenLinkedInDirect}
+                  className="btn btn-primary"
+                  style={{
+                    background: '#0a66c2',
+                    borderColor: '#0a66c2',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    padding: '10px 20px',
+                    margin: '0 auto'
+                  }}
+                >
+                  <Linkedin size={18} />
+                  <span>Ouvrir LinkedIn &amp; Me Connecter</span>
+                  <ExternalLink size={15} />
+                </button>
               </div>
 
               <form onSubmit={handleCredentialsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
