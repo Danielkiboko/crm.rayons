@@ -63,8 +63,26 @@ export default function CpanelSubscriptionsPage() {
     fetchAllUsersFromFirestore().then((cloudUsers) => {
       if (cloudUsers && cloudUsers.length > 0) {
         const mergedMap = new Map<string, User>();
-        local.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-        cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), { ...mergedMap.get(u.email.toLowerCase()), ...u }));
+        local.forEach(u => {
+          if (u && u.email) mergedMap.set(u.email.toLowerCase(), u);
+        });
+        cloudUsers.forEach(u => {
+          if (u && u.email) {
+            const key = u.email.toLowerCase();
+            const existing = mergedMap.get(key) || ({} as User);
+            mergedMap.set(key, {
+              ...existing,
+              ...u,
+              id: u.id || existing.id || `user-${Date.now()}`,
+              name: u.name || (u as any).displayName || (u as any).fullName || existing.name || (u.email ? u.email.split('@')[0] : 'Utilisateur'),
+              email: u.email,
+              companyName: u.companyName || (u as any).company || existing.companyName || 'Entreprise',
+              role: u.role || existing.role || 'client',
+              status: u.status || existing.status || 'active',
+              createdAt: u.createdAt || existing.createdAt || new Date().toISOString()
+            });
+          }
+        });
         const merged = Array.from(mergedMap.values());
         setUsers(merged);
         saveSaasUsers(merged);

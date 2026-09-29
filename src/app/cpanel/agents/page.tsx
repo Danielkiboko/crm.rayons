@@ -86,8 +86,26 @@ export default function AdminUsersPage() {
       const allCloud = [...(supabaseUsers || []), ...(cloudUsers || [])];
       if (allCloud.length > 0) {
         const mergedMap = new Map<string, User>();
-        local.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-        allCloud.forEach(u => mergedMap.set(u.email.toLowerCase(), { ...mergedMap.get(u.email.toLowerCase()), ...u }));
+        local.forEach(u => {
+          if (u && u.email) mergedMap.set(u.email.toLowerCase(), u);
+        });
+        allCloud.forEach(u => {
+          if (u && u.email) {
+            const key = u.email.toLowerCase();
+            const existing = mergedMap.get(key) || ({} as User);
+            mergedMap.set(key, {
+              ...existing,
+              ...u,
+              id: u.id || existing.id || `user-${Date.now()}`,
+              name: u.name || (u as any).displayName || (u as any).fullName || existing.name || (u.email ? u.email.split('@')[0] : 'Utilisateur'),
+              email: u.email,
+              companyName: u.companyName || (u as any).company || existing.companyName || 'Entreprise',
+              role: u.role || existing.role || 'client',
+              status: u.status || existing.status || 'active',
+              createdAt: u.createdAt || existing.createdAt || new Date().toISOString()
+            });
+          }
+        });
         const merged = Array.from(mergedMap.values());
         setUsers(merged);
         saveSaasUsers(merged);
@@ -273,10 +291,16 @@ export default function AdminUsersPage() {
 
   // Filtered list
   const filteredUsers = users.filter(u => {
+    if (!u) return false;
+    const name = u.name || (u as any).displayName || (u as any).fullName || (u.email ? u.email.split('@')[0] : 'Utilisateur');
+    const email = u.email || '';
+    const company = u.companyName || (u as any).company || 'Entreprise';
+    const term = (searchTerm || '').toLowerCase();
+
     const matchesSearch = 
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.companyName.toLowerCase().includes(searchTerm.toLowerCase());
+      name.toLowerCase().includes(term) ||
+      email.toLowerCase().includes(term) ||
+      company.toLowerCase().includes(term);
 
     const trial = checkUserTrialStatus(u);
     let matchesPlan = true;
@@ -622,11 +646,11 @@ export default function AdminUsersPage() {
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}>
-                          {u.name.charAt(0).toUpperCase()}
+                          {(u.name || u.email || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div>
                           <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            {u.name}
+                            {u.name || (u.email ? u.email.split('@')[0] : 'Utilisateur')}
                             {isSuperAdmin && <span className="badge badge-primary" style={{ fontSize: '0.6rem' }}>SUPER ADMIN</span>}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
@@ -637,7 +661,7 @@ export default function AdminUsersPage() {
                     </td>
 
                     <td style={{ padding: '14px 18px' }}>
-                      <span style={{ fontWeight: 600 }}>{u.companyName}</span>
+                      <span style={{ fontWeight: 600 }}>{u.companyName || 'Entreprise'}</span>
                     </td>
 
                     <td style={{ padding: '14px 18px' }}>
