@@ -223,28 +223,40 @@ export default function AdminUsersPage() {
     e.preventDefault();
     if (!newName || !newEmail || !newPassword) return;
 
+    const cleanEmail = newEmail.trim().toLowerCase();
     try {
-      // 1. Create real Auth user via secondary app (so Admin stays logged in)
-      const secondaryAuth = createAdminSecondaryAppAuth();
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim().toLowerCase(), newPassword);
-      const newUid = userCredential.user.uid;
-
-      // 2. Envoi officiel immédiat par le service e-mail par défaut de Firebase
-      try {
-        await sendPasswordResetEmail(secondaryAuth, newEmail.trim().toLowerCase());
-      } catch (mailErr) {
-        console.warn('Firebase default mail notice:', mailErr);
-      }
+      let newUid = `user-${Date.now()}`;
       
-      // Sign out the secondary app so it doesn't leak session
-      await signOut(secondaryAuth);
+      // 1. Tenter la création du compte Auth via application secondaire
+      try {
+        const secondaryAuth = createAdminSecondaryAppAuth();
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, newPassword);
+        newUid = userCredential.user.uid;
+        
+        // Envoi officiel immédiat par le service e-mail par défaut de Firebase
+        try {
+          await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+        } catch (mErr) {
+          console.warn('Firebase default mail notice:', mErr);
+        }
+        await signOut(secondaryAuth);
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          // L'utilisateur existe déjà dans Firebase Auth, on lui envoie quand même l'e-mail officiel
+          if (auth) {
+            await sendPasswordResetEmail(auth, cleanEmail).catch(() => {});
+          }
+        } else {
+          throw authErr;
+        }
+      }
 
-      // 3. Prepare user object with the real Firebase UID
+      // 2. Préparer l'objet utilisateur CRM
       const isPro = newInitialPlan === 'pro_monthly';
       const newUserData: User = {
         id: newUid,
         name: newName.trim(),
-        email: newEmail.trim().toLowerCase(),
+        email: cleanEmail,
         password: newPassword,
         companyName: newCompany.trim() || 'Client CRM Rayons',
         role: 'client',
@@ -263,7 +275,7 @@ export default function AdminUsersPage() {
         hasLinkedinUpgrade: newHasLinkedinUpgrade
       };
 
-      // 4. Save to Local & Sync to Supabase + Firestore
+      // 3. Enregistrer en local et synchroniser dans Firestore + Supabase
       const created = addSaasUser(newUserData);
       setUsers(created);
       await Promise.all([
@@ -281,7 +293,7 @@ export default function AdminUsersPage() {
       setNewHasLinkedinUpgrade(false);
       setNewSmppCredits(1000);
       setNewRcsCredits(1000);
-      showToast(`Compte créé et e-mail Firebase officiel expédié à ${newUserData.email} !`);
+      showToast(`Compte client activé et e-mail Firebase officiel envoyé à ${cleanEmail} !`);
     } catch (error: any) {
       console.error('Erreur création auth Firebase:', error);
       alert(`Erreur création utilisateur Firebase : ${error.message}`);
