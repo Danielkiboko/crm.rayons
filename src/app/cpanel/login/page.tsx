@@ -31,8 +31,6 @@ export default function CpanelLoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('danielkiboko218@gmail.com');
-  const [newPass, setNewPass] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
   const [isForgotLoading, setIsForgotLoading] = useState(false);
@@ -329,29 +327,20 @@ export default function CpanelLoginPage() {
                 return;
               }
 
-              if (!newPass || newPass.length < 6) {
-                setForgotError("Le nouveau mot de passe doit comporter au moins 6 caractères.");
-                return;
-              }
-
-              if (newPass !== confirmPass) {
-                setForgotError("Les deux mots de passe ne correspondent pas.");
-                return;
-              }
-
               setIsForgotLoading(true);
               try {
-                // Enregistrement sécurisé du mot de passe admin personnalisé
-                localStorage.setItem('rayons_crm_custom_admin_pass', newPass);
-                setPassword(newPass);
-                setEmail(clean);
-                setForgotSuccess("Votre mot de passe a été mis à jour avec succès ! Vous pouvez maintenant vous connecter.");
-                setTimeout(() => {
-                  setShowForgotModal(false);
-                  setForgotSuccess(null);
-                }, 1500);
+                if (!auth) throw new Error('Firebase Auth non initialisé');
+                await sendPasswordResetEmail(auth, clean);
+                setForgotSuccess(`Un e-mail contenant votre lien de réinitialisation sécurisé a été envoyé à ${clean}. Veuillez cliquer sur ce lien dans votre boîte de réception pour définir votre nouveau mot de passe.`);
               } catch (err: any) {
-                setForgotError(err.message || 'Erreur lors de la mise à jour du mot de passe.');
+                console.error(err);
+                if (err.code === 'auth/user-not-found') {
+                  setForgotError("Aucun compte Firebase n'a été trouvé pour cet e-mail.");
+                } else if (err.code === 'auth/invalid-email') {
+                  setForgotError("Adresse e-mail invalide.");
+                } else {
+                  setForgotError(`Erreur: ${err.message || err.code}`);
+                }
               } finally {
                 setIsForgotLoading(false);
               }
@@ -368,30 +357,6 @@ export default function CpanelLoginPage() {
                 />
               </div>
 
-              <div>
-                <label className="label">Nouveau Mot de Passe (min. 6 car.) *</label>
-                <input 
-                  type="password" 
-                  value={newPass} 
-                  onChange={(e) => setNewPass(e.target.value)} 
-                  placeholder="••••••••••••" 
-                  className="input" 
-                  required 
-                />
-              </div>
-
-              <div>
-                <label className="label">Confirmer le Nouveau Mot de Passe *</label>
-                <input 
-                  type="password" 
-                  value={confirmPass} 
-                  onChange={(e) => setConfirmPass(e.target.value)} 
-                  placeholder="••••••••••••" 
-                  className="input" 
-                  required 
-                />
-              </div>
-
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
                 <button 
                   type="button" 
@@ -401,7 +366,7 @@ export default function CpanelLoginPage() {
                   Fermer
                 </button>
                 <button type="submit" disabled={isForgotLoading} className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444' }}>
-                  {isForgotLoading ? 'Enregistrement...' : 'Définir ce Mot de Passe'}
+                  {isForgotLoading ? 'Envoi en cours...' : 'Envoyer le lien de Réinitialisation'}
                 </button>
               </div>
             </form>
