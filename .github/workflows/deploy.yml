@@ -25,13 +25,13 @@ jobs:
 
       - name: 🏗️ Compilation Next.js Production
         env:
-          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDe21uXg5GBELGEFxsTSr0db45oH7h1M0g' }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'crmrayonsnet.firebaseapp.com' }}
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'crmrayonsnet' }}
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'crmrayonsnet.firebasestorage.app' }}
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '1078916564038' }}
-          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID || '1:1078916564038:web:33122b32e580a6152c3647' }}
-          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-YVC2C3QMPT' }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyCl8-7YlZk0E8BNmsvmIht7qhAcfbWa5k0' }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'projets-rayons2.firebaseapp.com' }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'projets-rayons2' }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'projets-rayons2.firebasestorage.app' }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '226661024947' }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID || '1:226661024947:web:08db51e451aa46d2a0dcc6' }}
+          NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-D82SGYRF9J' }}
           NEXT_PUBLIC_SUPERADMIN_EMAILS: ${{ secrets.NEXT_PUBLIC_SUPERADMIN_EMAILS || 'danielkiboko218@gmail.com,crm@rayons.net,daniel.kiboko@rayons.net' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://sbwlpiexbuwzvgxyktrn.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_lbwpW9vuoDjvT11s7DErDw_HFfkpRph' }}
