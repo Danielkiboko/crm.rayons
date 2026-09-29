@@ -45,8 +45,8 @@ import {
   deleteUserFromFirestore 
 } from '@/lib/firestoreService';
 import { fetchUsersFromSupabase, syncUserToSupabase } from '@/lib/supabaseService';
-import { createAdminSecondaryAppAuth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createAdminSecondaryAppAuth, auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -228,11 +228,18 @@ export default function AdminUsersPage() {
       const secondaryAuth = createAdminSecondaryAppAuth();
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim().toLowerCase(), newPassword);
       const newUid = userCredential.user.uid;
+
+      // 2. Envoi officiel immédiat par le service e-mail par défaut de Firebase
+      try {
+        await sendPasswordResetEmail(secondaryAuth, newEmail.trim().toLowerCase());
+      } catch (mailErr) {
+        console.warn('Firebase default mail notice:', mailErr);
+      }
       
       // Sign out the secondary app so it doesn't leak session
       await signOut(secondaryAuth);
 
-      // 2. Prepare user object with the real Firebase UID
+      // 3. Prepare user object with the real Firebase UID
       const isPro = newInitialPlan === 'pro_monthly';
       const newUserData: User = {
         id: newUid,
@@ -256,31 +263,13 @@ export default function AdminUsersPage() {
         hasLinkedinUpgrade: newHasLinkedinUpgrade
       };
 
-      // 3. Save to Local & Sync to Supabase + Firestore
+      // 4. Save to Local & Sync to Supabase + Firestore
       const created = addSaasUser(newUserData);
       setUsers(created);
       await Promise.all([
         syncUserToFirestore(newUserData).catch(() => {}),
         syncUserToSupabase(newUserData).catch(() => {})
       ]);
-
-      // 4. Send Welcome Email with Credentials to the user
-      try {
-        await fetch('/api/auth/send-welcome-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: newUserData.name,
-            email: newUserData.email,
-            password: newUserData.password,
-            company: newUserData.companyName,
-            plan: newUserData.subscriptionPlan,
-            loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://crm.rayons.net/login'
-          })
-        });
-      } catch (e) {
-        console.warn('Welcome email error:', e);
-      }
       
       setIsAddingUser(false);
       setNewName('');
@@ -292,10 +281,22 @@ export default function AdminUsersPage() {
       setNewHasLinkedinUpgrade(false);
       setNewSmppCredits(1000);
       setNewRcsCredits(1000);
-      showToast(`Compte créé et e-mail d'accès envoyé à ${newUserData.email} !`);
+      showToast(`Compte créé et e-mail Firebase officiel expédié à ${newUserData.email} !`);
     } catch (error: any) {
       console.error('Erreur création auth Firebase:', error);
       alert(`Erreur création utilisateur Firebase : ${error.message}`);
+    }
+  };
+
+  const handleSendFirebaseEmail = async (u: User) => {
+    if (!u.email) return;
+    try {
+      if (!auth) throw new Error('Firebase Auth non initialisé');
+      await sendPasswordResetEmail(auth, u.email.trim().toLowerCase());
+      showToast(`E-mail officiel Firebase envoyé à ${u.email} !`);
+    } catch (err: any) {
+      console.error(err);
+      showToast(`Erreur envoi e-mail Firebase : ${err.message}`);
     }
   };
 
@@ -783,6 +784,17 @@ export default function AdminUsersPage() {
                           >
                             {copiedId === u.id ? <Check size={12} color="#34d399" /> : <Copy size={12} />}
                             {copiedId === u.id ? 'Copié' : 'Identifiants'}
+                          </button>
+
+                          {/* Send / Resend Firebase Official Email */}
+                          <button
+                            onClick={() => handleSendFirebaseEmail(u)}
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.72rem', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px', color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)' }}
+                            title="Envoyer l'e-mail officiel Firebase pour accéder au compte et définir le mot de passe"
+                          >
+                            <Mail size={12} />
+                            Email Firebase
                           </button>
 
                           {/* +7 days */}
